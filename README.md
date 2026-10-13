@@ -1,7 +1,9 @@
 SNAKE CON REINFORCEMENT LEARNING: SARSA vs Q-LEARNING
 ======================================================
 
-![snake](q_learning_2/snake_final_qlearning.gif)
+<p align="center">
+  <img src="q_learning_2/snake_final_qlearning.gif" width="400" alt="snake">
+</p>
 
 DESCRIZIONE DEL PROGETTO
 ------------------------
