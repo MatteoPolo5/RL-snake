@@ -1,6 +1,8 @@
 SNAKE CON REINFORCEMENT LEARNING: SARSA vs Q-LEARNING
 ======================================================
 
+![snake](q_learining_2/snake_final_qlearning.gif)
+
 DESCRIZIONE DEL PROGETTO
 ------------------------
 Il progetto addestra un agente a giocare a Snake su una griglia 10x10 con
