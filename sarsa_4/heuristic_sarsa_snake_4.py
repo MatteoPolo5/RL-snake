@@ -8,6 +8,7 @@ Fa riferimento a `environments_fully_observable.py`:
                               RIGHT -> colonna+1, LEFT -> colonna-1
 """
 
+import os
 import csv
 import numpy as np
 import tensorflow as tf
@@ -116,6 +117,50 @@ def trap_penalty(board, weight=TRAP_PENALTY_WEIGHT):
     if reachable >= needed:
         return 0.0
     return -weight * (1.0 - reachable / needed)   # più è stretto lo spazio, più penalizza
+
+
+# ---------------------------------------------------------------------------
+# 1b) REWARD SHAPING DELL'AUTO-COLLISIONE (vedi ERRORI_RISCONTRATI.md, E1)
+# ---------------------------------------------------------------------------
+# Reward originale dell'ambiente: +0.5 per frutto, -0.1 per segmento perso.
+# Perdere un segmento costava meno di quanto valeva guadagnarlo, quindi il
+# ciclo "mangia e tagliati la coda" rendeva +0.4 per segmento (reward hacking).
+# Nuova penalita': -(FISSA + PER_SEGMENTO * segmenti_persi), con
+# PER_SEGMENTO >= FRUIT_REWARD, cosi' ogni ciclo mangia-e-tagliati e'
+# strettamente svantaggioso. L'ambiente NON viene modificato: il reward
+# viene ricalcolato qui, nello script di training.
+COLLISION_FIXED_PENALTY = 0.5
+COLLISION_SEGMENT_PENALTY = 0.5
+
+
+def body_lengths(env):
+    """Numero di segmenti di corpo (testa esclusa) per ogni board."""
+    return np.array([len(b) for b in env.bodies], dtype=float)
+
+
+def segments_lost_in_step(env, len_before, env_rewards):
+    """
+    Segmenti persi per auto-collisione in questo passo, ricavati dallo stato
+    dell'ambiente (non dal valore del reward, vedi E2):
+        len_dopo = len_prima + frutto_mangiato - segmenti_persi
+    Le board vinte (WIN_REWARD) vengono resettate dall'ambiente e il corpo
+    azzerato: non e' una collisione, quindi le escludiamo.
+    """
+    ate_fruit = np.isclose(env_rewards, env.FRUIT_REWARD).astype(float)
+    lost = len_before + ate_fruit - body_lengths(env)
+    lost[np.isclose(env_rewards, env.WIN_REWARD)] = 0.0
+    return np.maximum(lost, 0.0)
+
+
+def shaped_rewards(env_rewards, segments_lost):
+    """Sostituisce il reward di auto-collisione con la penalita' corretta."""
+    rewards = env_rewards.copy()
+    collided = segments_lost > 0
+    rewards[collided] = -(COLLISION_FIXED_PENALTY
+                          + COLLISION_SEGMENT_PENALTY * segments_lost[collided])
+    return rewards
+
+
 # ---------------------------------------------------------------------------
 # 2) Q-NETWORK (approssimatore di Q(s,a))
 # ---------------------------------------------------------------------------
@@ -245,7 +290,8 @@ def visualize_policy(q_network, board_size, epsilon=0.0, max_steps=500, path="sn
 # 5) CICLO SARSA (on-policy TD control)
 # ---------------------------------------------------------------------------
 def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
-                 epsilon_start=0.2, epsilon_end=0.02, gamma=0.95, visualize_every=None, csv_path="training_history_sarsa.csv", csv_every=20):
+                 epsilon_start=0.2, epsilon_end=0.02, gamma=0.95, visualize_every=None,
+                 output_dir=".", csv_path="training_history_sarsa.csv", csv_every=20):
     """
     visualize_every: se impostato (es. 100), ogni N episodi salva una GIF
     dell'episodio corrente giocato dalla policy appresa, così puoi controllare
@@ -258,7 +304,8 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         "reward_medio": [],       # reward medio per board, sommato sull'episodio
         "frutti_mangiati": [],    # numero medio di frutti mangiati per board
         "self_collision": [],    # numero medio di volte che si e' mangiato da solo
-        "segmenti_persi": [],   # <-- nuova    
+        "segmenti_persi": [],     # segmenti di coda persi in totale nell'episodio
+        "lunghezza_media": [],    # lunghezza media del serpente (testa inclusa) nell'episodio
         "loss_media": [],         # loss media della rete nell'episodio
     }
 
@@ -272,27 +319,31 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         ep_reward = np.zeros(env.n_boards)
         ep_fruits = np.zeros(env.n_boards)
         ep_self_collision = np.zeros(env.n_boards)
+        ep_length_sum = np.zeros(env.n_boards)
         ep_losses = []
 
         for step in range(max_steps):
             state = env.to_state()
+            len_before = body_lengths(env)
 
-            rewards = env.move(actions)                      # esegue A, ottiene R
-            rewards_np = rewards.numpy().reshape(-1)
+            env_rewards = env.move(actions).numpy().reshape(-1)   # esegue A, ottiene R (originale)
 
-            ep_reward += rewards_np
-            ep_fruits += (rewards_np == env.FRUIT_REWARD).astype(float)
-            is_self_collision = (rewards_np < 0) & (~np.isclose(rewards_np, env.HIT_WALL_REWARD))
-            ep_self_collision += is_self_collision.astype(float)
-
-            segments_lost_step = np.zeros_like(rewards_np)
-            segments_lost_step[is_self_collision] = rewards_np[is_self_collision] / env.ATE_HIMSELF_REWARD
+            # metriche ricavate dallo stato dell'ambiente, non dal valore del reward (E2)
+            segments_lost_step = segments_lost_in_step(env, len_before, env_rewards)
+            ep_fruits += np.isclose(env_rewards, env.FRUIT_REWARD).astype(float)
+            ep_self_collision += (segments_lost_step > 0).astype(float)
             ep_segments_lost += segments_lost_step
-            
+            ep_length_sum += body_lengths(env) + 1.0          # +1 = testa
+
+            # reward shaping dell'auto-collisione (E1)
+            rewards_np = shaped_rewards(env_rewards, segments_lost_step)
+            ep_reward += rewards_np
+            rewards = tf.constant(rewards_np.reshape(-1, 1), dtype=tf.float32)
+
             #penalties = np.array([trap_penalty(env.boards[i]) for i in range(env.n_boards)],
             #                     dtype=np.float32)
             #rewards = rewards + tf.reshape(tf.constant(penalties), (-1, 1))
-            
+
             next_state = env.to_state()                       # osserva S'
             next_actions = choose_actions(env, q_network, actions, epsilon)  # sceglie A' (on-policy)
 
@@ -316,20 +367,27 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
 
         history["reward_medio"].append(float(np.mean(ep_reward)))
         history["frutti_mangiati"].append(float(np.mean(ep_fruits)))
-        history["segmenti_persi"].append(float(np.mean(ep_segments_lost)))   # <-- nuova
+        history["segmenti_persi"].append(float(np.mean(ep_segments_lost)))
         history["self_collision"].append(float(np.mean(ep_self_collision)))
+        history["lunghezza_media"].append(float(np.mean(ep_length_sum / max_steps)))
         history["loss_media"].append(float(np.mean(ep_losses)))
 
-        if episode % 50 == 0:
-            print(f"Episodio {episode} completato")
+        if episode % 10 == 0:
+            print(f"Episodio {episode}: reward={history['reward_medio'][-1]:.2f} "
+                  f"frutti={history['frutti_mangiati'][-1]:.1f} "
+                  f"collisioni={history['self_collision'][-1]:.2f} "
+                  f"segm_persi={history['segmenti_persi'][-1]:.1f} "
+                  f"lunghezza={history['lunghezza_media'][-1]:.2f} "
+                  f"loss={history['loss_media'][-1]:.4f}")
 
         if visualize_every and episode % visualize_every == 0 and episode > 0:
             visualize_policy(q_network, env.board_size,
-                              path=f"snake_sarsa_checkpoint_ep{episode}.gif")
+                              path=os.path.join(output_dir, f"snake_sarsa_checkpoint_ep{episode}.gif"))
 
         if csv_every and episode % csv_every == 0 and episode > 0:
             save_history_csv(history, path=csv_path)
 
+    save_history_csv(history, path=csv_path)   # salvataggio finale: include gli ultimi episodi
     return history
 
 
@@ -346,11 +404,13 @@ def plot_training_history(history, path="training_history.png", window=10):
         kernel = np.ones(window) / window
         return np.convolve(values, kernel, mode="valid")
 
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
+    fig, axes = plt.subplots(2, 3, figsize=(15, 7))
     titles = [
         ("reward_medio", "Reward medio per episodio"),
         ("frutti_mangiati", "Frutti mangiati per episodio"),
+        ("lunghezza_media", "Lunghezza media del serpente"),
         ("self_collision", "Auto-collisioni per episodio"),
+        ("segmenti_persi", "Segmenti persi per episodio"),
         ("loss_media", "Loss media della rete"),
     ]
 
@@ -374,7 +434,7 @@ def save_history_csv(history, path="training_history.csv"):
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["episodio", "reward_medio", "frutti_mangiati", "self_collision",
-                          "segmenti_persi", "loss_media"])
+                          "segmenti_persi", "lunghezza_media", "loss_media"])
         for i in range(n_episodes):
             writer.writerow([
                 i,
@@ -382,6 +442,7 @@ def save_history_csv(history, path="training_history.csv"):
                 history["frutti_mangiati"][i],
                 history["self_collision"][i],
                 history["segmenti_persi"][i],
+                history["lunghezza_media"][i],
                 history["loss_media"][i],
             ])
     print(f"CSV salvato in: {path}")
@@ -391,17 +452,26 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
+    N_EPISODES = 60            # run breve di verifica del reward shaping (baseline: 200)
+    VISUALIZE_EVERY = 20
+
+    # i risultati vanno in una cartella separata, cosi' quelli della baseline
+    # (reward originale) restano intatti per il confronto nel report
+    OUTPUT_DIR = "risultati_reward_shaping"
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)
     q_network = build_q_network(BOARD_SIZE)
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
-    # visualize_every=30 -> salva una gif ogni 30 episodi per controllare i progressi
-    history = sarsa_train(env, q_network, optimizer, n_episodes=200, epsilon_start=0.2,
-                           epsilon_end=0.02, visualize_every=50, csv_every=20)
+    history = sarsa_train(env, q_network, optimizer, n_episodes=N_EPISODES, epsilon_start=0.2,
+                           epsilon_end=0.02, visualize_every=VISUALIZE_EVERY, csv_every=20,
+                           output_dir=OUTPUT_DIR,
+                           csv_path=os.path.join(OUTPUT_DIR, "training_history_sarsa.csv"))
 
-    plot_training_history(history, path="training_history.png")
+    plot_training_history(history, path=os.path.join(OUTPUT_DIR, "training_history.png"))
 
     # episodio finale con la policy addestrata (epsilon=0 -> nessuna esplorazione)
     print("\nRegistro l'episodio finale con la policy addestrata...")
-    visualize_policy(q_network, BOARD_SIZE, epsilon=0.0, path="snake_final.gif")
+    visualize_policy(q_network, BOARD_SIZE, epsilon=0.0,
+                     path=os.path.join(OUTPUT_DIR, "snake_final.gif"))

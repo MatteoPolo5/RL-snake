@@ -16,7 +16,8 @@ Data individuazione: 2026-11-11
 Algoritmo:           SARSA (sarsa_4); riguarda anche Q-learning (q_learning_2),
                      che usa lo stesso ambiente e gli stessi reward
 Categoria:           progettazione della funzione di reward
-Stato:               APERTO
+Stato:               CORRETTO in SARSA (in attesa di verifica sperimentale);
+                     da applicare a Q-learning
 
 DESCRIZIONE
 L'agente non impara a sopravvivere facendo crescere il serpente: impara a
@@ -70,5 +71,63 @@ SPUNTI PER IL REPORT
   NON risolve il problema, perche' per costruzione lascia invariata la
   policy ottima. Bisogna cambiare il reward vero e proprio.
 
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py)
+Nuova penalita' di auto-collisione, con k = segmenti persi:
+  R_collisione = -(0.5 + 0.5 * k)
+- La parte proporzionale (0.5 per segmento = FRUIT_REWARD) restituisce
+  esattamente quanto il segmento era valso: da sola renderebbe il ciclo
+  mangia-e-tagliati neutro (rendimento 0).
+- La parte fissa (0.5) rende ogni collisione strettamente svantaggiosa:
+  mangiare k frutti e poi perderli rende 0.5k - (0.5 + 0.5k) = -0.5
+  (con il reward originale rendeva +0.4k).
+- Tra collisioni inevitabili l'ordinamento resta guidato da k: se
+  intrappolato, l'agente preferisce comunque mordersi vicino alla coda.
+- Frutto (+0.5) e muro (-0.3) invariati.
+- L'ambiente NON e' modificato: il reward viene ricalcolato nello script
+  di training (funzioni segments_lost_in_step e shaped_rewards).
+- Aggiunta la metrica "lunghezza_media" del serpente, che misura
+  direttamente l'obiettivo reale (il reward medio da solo puo' ingannare).
+
+Rischio da monitorare: la penalita' cresce con la lunghezza, quindi un
+serpente lungo e' "a rischio" e l'agente potrebbe diventare troppo prudente
+(smettere di mangiare quando e' lungo). Va osservato nei risultati.
+
+Verifica sperimentale: run SARSA breve (60 episodi), risultati in
+sarsa_4/risultati_reward_shaping/. Esito: (da compilare)
+
+
+-------------------------------------------------------------------------------
+E2. METRICHE: AUTO-COLLISIONI DA 3 SEGMENTI CONTATE COME URTI CONTRO IL MURO
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-11
+Algoritmo:           SARSA e Q-learning (stesso codice delle metriche)
+Categoria:           bug nel calcolo delle metriche
+Stato:               CORRETTO in SARSA; da applicare a Q-learning
+
+DESCRIZIONE
+Le auto-collisioni venivano riconosciute dal valore del reward: "reward
+negativo e diverso da HIT_WALL_REWARD (-0.3)". Ma un'auto-collisione che fa
+perdere esattamente 3 segmenti vale 3 * (-0.1) = -0.3, cioe' lo stesso
+valore dell'urto contro il muro, e veniva quindi scartata.
+
+EVIDENZA
+Test con 32 board per 3000 passi (policy euristica mista a mosse casuali):
+su 4999 auto-collisioni, 629 (12.6%) erano da esattamente 3 segmenti, cioe'
+sarebbero state ignorate dalla metrica originale.
+
+CONSEGUENZE
+"self_collision" e "segmenti_persi" nei CSV della baseline (reward
+originale, sia SARSA che Q-learning) sono SOTTOSTIMATI. La frazione esatta
+dipende dalla policy; nel test sopra era il 12.6% delle collisioni.
+Va tenuto presente quando si riportano i numeri della baseline nel report.
+
 CORREZIONE
-(da definire e documentare qui una volta implementata)
+Le metriche ora sono ricavate dallo stato dell'ambiente e non dal reward:
+  segmenti_persi = lunghezza_prima + frutto_mangiato - lunghezza_dopo
+Verificato sullo stesso test: 0 discrepanze con la penalita' calcolata
+dall'ambiente. Il nuovo metodo resta valido anche dopo il reward shaping
+(E1), che rende inutilizzabile il riconoscimento basato sul valore.
+
+SPUNTI PER IL REPORT
+Classificare gli eventi a partire dal valore del reward e' fragile: valori
+diversi di eventi diversi possono coincidere. Meglio misurare dallo stato.
