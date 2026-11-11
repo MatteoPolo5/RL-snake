@@ -265,5 +265,26 @@ SPUNTI PER IL REPORT
   comportamento sta peggiorando.
 - Mancava una metrica per gli urti contro il muro.
 
-CORREZIONE
-(da definire)
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py) - in attesa di verifica
+1) Maschera sul muro nella scelta greedy (funzione wall_actions_mask): le
+   azioni che porterebbero la testa contro il muro hanno Q = -inf prima
+   dell'argmax, come il dietro-front (E3, correzione A). Resta sempre almeno
+   una mossa (in un angolo con il collo dietro ne resta una sola). Le mosse
+   sul corpo restano permesse: evitare le trappole e' cio' che la rete deve
+   imparare. Con muro e dietro-front mascherati, la rete non deve piu'
+   imparare le regole del gioco ma solo la strategia; l'euristica di
+   esplorazione esclude gia' entrambe, quindi le due parti della policy sono
+   coerenti.
+2) Nuova metrica di training "urti_muro" (testa ferma dopo la mossa).
+3) Valutazione separata (evaluate_policy): ogni 10 episodi e all'ultimo,
+   la policy greedy (epsilon = 0) gioca 10 partite nuove da 500 passi con
+   seed fisso (stesse posizioni iniziali a ogni valutazione). Registra
+   frutti, lunghezza massima e finale, auto-collisioni, segmenti persi,
+   urti contro il muro. Lo stato del generatore casuale del training viene
+   salvato e ripristinato. Output: eval_history_sarsa.csv, eval_history.png.
+Verifica del codice: maschera muro confrontata con la definizione diretta
+su 32000 stati (1912 in un angolo); con epsilon = 0 nessun urto contro il
+muro e nessun dietro-front; due valutazioni consecutive danno risultati
+identici e non alterano il generatore casuale del training.
+Verifica sperimentale: run SARSA di 60 episodi, risultati in
+sarsa_4/risultati_mask_muro/. Esito: (da compilare)
