@@ -93,7 +93,9 @@ serpente lungo e' "a rischio" e l'agente potrebbe diventare troppo prudente
 (smettere di mangiare quando e' lungo). Va osservato nei risultati.
 
 Verifica sperimentale: run SARSA breve (60 episodi), risultati in
-sarsa_4/risultati_reward_shaping/. Esito: (da compilare)
+sarsa_4/risultati_reward_shaping/. Esito: NEGATIVO. Il reward hacking e'
+sparito, ma l'agente e' collassato su una policy passiva che non mangia
+piu' (vedi E3).
 
 
 -------------------------------------------------------------------------------
@@ -131,3 +133,60 @@ dall'ambiente. Il nuovo metodo resta valido anche dopo il reward shaping
 SPUNTI PER IL REPORT
 Classificare gli eventi a partire dal valore del reward e' fragile: valori
 diversi di eventi diversi possono coincidere. Meglio misurare dallo stato.
+
+
+-------------------------------------------------------------------------------
+E3. COLLASSO SU UNA POLICY PASSIVA DOPO LA CORREZIONE DEL REWARD
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-11
+Algoritmo:           SARSA con reward corretto (E1), run di 60 episodi
+Categoria:           progettazione del reward / dinamica di apprendimento
+Stato:               APERTO
+
+DESCRIZIONE
+Con la nuova penalita' di auto-collisione l'agente smette di mangiare:
+oscilla avanti e indietro tra due celle (o gira in un quadrato 2x2) con il
+serpente lungo 1 (solo la testa), evitando il frutto. Reward medio = 0.
+
+EVIDENZA SPERIMENTALE (sarsa_4/risultati_reward_shaping/)
+                          episodio 0    ultimi 10 episodi
+  frutti mangiati           6.7           ~0.0
+  auto-collisioni           4.8           ~0.0
+  segmenti persi            6.7           ~0.0
+  lunghezza media           1.37          1.00
+  reward medio            -44.9           ~0.0
+- Per tutto il training segmenti_persi ~= frutti_mangiati e ogni collisione
+  costa ~1 segmento: il serpente mangia e subito dopo si morde il collo.
+- GIF (checkpoint 20, 40 e finale): in 500 passi il frutto non viene mai
+  mangiato; la testa alterna fra 2 celle (ep20, finale) o 4 celle (ep40).
+- Loss ~0: la rete prevede Q ~ 0 ovunque, cioe' il valore della policy
+  "non fare niente".
+
+CAUSA
+1. Con un serpente di lunghezza 1 il dietro-front e' gratis (non c'e' corpo
+   da colpire), quindi oscillare e' una policy a costo zero (STEP_REWARD = 0).
+2. Appena l'agente mangia, il serpente ha un segmento e lo stesso dietro-front
+   diventa un'auto-collisione: +0.5 (frutto) - 1.0 (collisione con k = 1)
+   = -0.5. Data l'abitudine appresa di oscillare, mangiare ha valore
+   atteso negativo.
+3. L'alternativa "girovagare senza mangiare" vale 0, cioe' piu' di -0.5:
+   l'agente converge su un ottimo locale passivo.
+4. L'esplorazione (euristica, epsilon <= 0.2) porta l'agente sul frutto, ma
+   subito dopo la policy greedy fa dietro-front: l'esplorazione stessa
+   rinforza l'idea "frutto = male".
+5. Lo sconto (gamma = 0.95) favorisce il pericolo immediato rispetto ai
+   frutti lontani.
+Non e' l'ottimo vero: una policy che mangia senza mordersi ottiene reward
+positivo. E' un ottimo locale della dinamica di apprendimento.
+
+SPUNTI PER IL REPORT
+- Correggere un reward hacking ha prodotto il problema opposto: dal
+  "mangia e tagliati" al "non mangiare". Il reward va calibrato considerando
+  anche l'alternativa passiva (stare fermi/girovagare a costo zero).
+- Esempio di ottimo locale/policy degenerata in RL con approssimazione di
+  funzione e senza replay: l'esplorazione non basta a uscirne.
+- La scelta di non mascherare il dietro-front (README) ha un costo: e' la
+  causa dominante delle collisioni da 1 segmento.
+
+CORREZIONE
+(da definire)
