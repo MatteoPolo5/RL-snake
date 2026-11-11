@@ -206,4 +206,64 @@ Verifica del codice: su 6751 stati con collo, l'azione mascherata porta
 sempre sul collo; con epsilon = 0 la policy greedy non ha mai fatto
 dietro-front ne' morso il collo.
 Verifica sperimentale: run SARSA di 60 episodi, risultati in
-sarsa_4/risultati_mask_steppenalty/. Esito: (da compilare)
+sarsa_4/risultati_mask_steppenalty/. Esito: POSITIVO sull'obiettivo
+reale. Lunghezza media del serpente da 3.5 (ep 0) a 35.6 (ep 59) su 64
+celle libere, auto-collisioni da ~5 a ~2 per episodio, la GIF finale mangia
+34 frutti in 500 passi senza urti. Il reward medio pero' DIMINUISCE
+durante il training (da circa -6 a circa -20): vedi E4.
+
+
+-------------------------------------------------------------------------------
+E4. IL REWARD MEDIO CALA MENTRE L'AGENTE MIGLIORA (URTI CONTRO IL MURO)
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-11
+Algoritmo:           SARSA con correzioni E1 + E3 (A+B), run di 60 episodi
+Categoria:           comportamento appreso / metrica di valutazione
+Stato:               APERTO
+
+DESCRIZIONE
+Con le correzioni A+B l'agente fa crescere il serpente e si morde meno, ma il
+reward medio per episodio scende. Scomponendo il reward nelle sue voci si vede
+che la causa principale sono gli urti contro il muro, in forte aumento.
+
+EVIDENZA (scomposizione del reward, sarsa_4/risultati_mask_steppenalty/)
+Gli urti contro il muro non sono registrati nel CSV, ma si ricavano per
+differenza:  urti = (R - 0.5*frutti + 0.5*collisioni + 0.5*segmenti
+                     + 0.01*500) / (-0.3)
+  ep   reward   frutti(+)  segmenti(-)  passi  muro(-)   urti muro
+   6   -11.4     +15.3       -16.1      -5.0    -2.7        ~9
+  12    -5.7     +16.4       -13.8      -5.0    -1.5        ~5
+  30   -12.4     +14.6       -15.7      -5.0    -4.9       ~16
+  42   -14.0     +12.8       -12.8      -5.0    -7.7       ~26
+  59   -19.8      +7.4        -7.7      -5.0   -13.5       ~45
+GIF del checkpoint 40 (env nuovo, serpente lungo 1): la testa resta ferma
+contro il muro per 494 passi su 500, senza mai mangiare.
+
+CAUSE
+1. Urti contro il muro in aumento (da ~5 a ~45 per episodio): e' la voce che
+   pesa di piu' nel calo. Un urto lascia lo stato quasi invariato (la testa
+   non si muove, si ritira solo la coda): se la rete sceglie "muro" in uno
+   stato, al passo dopo lo sceglie di nuovo -> loop. Con il serpente lungo 1
+   lo stato e' identico e il loop e' infinito (GIF ep40). In training lo
+   interrompe solo l'esplorazione, che pero' cala con epsilon (0.2 -> 0.02):
+   per questo gli urti crescono verso la fine.
+   E' la particolarita' dell'ambiente individuata in precedenza (urto contro
+   il muro = attesa sul posto con la coda che si ritira).
+2. Meno frutti (da ~30 a ~15 per episodio) man mano che il serpente si
+   allunga: con 35 segmenti su 64 celle raggiungere il frutto in sicurezza
+   richiede percorsi piu' lunghi.
+3. Le board non vengono mai resettate: ogni episodio parte con un serpente
+   piu' lungo del precedente, quindi il compito diventa piu' difficile
+   durante il training. Il reward per episodio non e' confrontabile tra
+   episodi diversi.
+
+SPUNTI PER IL REPORT
+- Il reward medio di training non e' una buona misura di progresso quando la
+  distribuzione degli stati cambia (task continuo, senza reset): serve una
+  valutazione separata (policy greedy, board nuove, piu' partite, seed fissi).
+- Scomporre il reward nelle sue componenti permette di diagnosticare quale
+  comportamento sta peggiorando.
+- Mancava una metrica per gli urti contro il muro.
+
+CORREZIONE
+(da definire)
