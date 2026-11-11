@@ -132,6 +132,11 @@ def trap_penalty(board, weight=TRAP_PENALTY_WEIGHT):
 COLLISION_FIXED_PENALTY = 0.5
 COLLISION_SEGMENT_PENALTY = 0.5
 
+# Costo di ogni passo (vedi E3, correzione B): toglie alla policy passiva
+# ("girovagare senza mangiare") il suo valore zero. Girovagare per sempre
+# vale STEP_PENALTY / (1 - gamma) = -0.01 / 0.05 = -0.2.
+STEP_PENALTY = -0.01
+
 
 def body_lengths(env):
     """Numero di segmenti di corpo (testa esclusa) per ogni board."""
@@ -153,12 +158,13 @@ def segments_lost_in_step(env, len_before, env_rewards):
 
 
 def shaped_rewards(env_rewards, segments_lost):
-    """Sostituisce il reward di auto-collisione con la penalita' corretta."""
+    """Sostituisce il reward di auto-collisione con la penalita' corretta
+    e aggiunge il costo di ogni passo."""
     rewards = env_rewards.copy()
     collided = segments_lost > 0
     rewards[collided] = -(COLLISION_FIXED_PENALTY
                           + COLLISION_SEGMENT_PENALTY * segments_lost[collided])
-    return rewards
+    return rewards + STEP_PENALTY
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +191,43 @@ OPPOSITE_DIRECTION = {
 }
 
 
+ACTION_FROM_DELTA = {
+    (1, 0): BaseEnvironment.UP,      # UP -> riga+1 (vedi move())
+    (-1, 0): BaseEnvironment.DOWN,
+    (0, 1): BaseEnvironment.RIGHT,
+    (0, -1): BaseEnvironment.LEFT,
+}
+
+
+def reverse_actions(env):
+    """
+    Per ogni board, l'azione che porterebbe la testa sul collo (il primo
+    segmento del corpo), cioe' il dietro-front; -1 se il corpo e' vuoto.
+    Si usa la posizione del collo e non l'ultima azione presa, cosi' il
+    risultato e' corretto anche dopo un urto contro il muro o all'inizio di
+    un episodio. Dopo un urto contro il muro l'ambiente inserisce in testa al
+    corpo la posizione della testa stessa: quei duplicati vengono saltati.
+    """
+    heads = np.argwhere(env.boards == BaseEnvironment.HEAD)[:, 1:]
+    rev = np.full(env.n_boards, -1)
+    for i, body in enumerate(env.bodies):
+        for seg in body:
+            delta = (int(seg[0] - heads[i][0]), int(seg[1] - heads[i][1]))
+            if delta != (0, 0):
+                rev[i] = ACTION_FROM_DELTA.get(delta, -1)
+                break
+    return rev
+
+
 def choose_actions(env, q_network, current_directions, epsilon):
-    # NB: nessuna maschera sul dietro-front nella scelta greedy: la rete deve
-    # imparare da sola, tramite ATE_HIMSELF_REWARD, a evitarlo.
+    # Correzione A (vedi E3): la scelta greedy esclude il dietro-front, che
+    # nel vero Snake e' una mossa impossibile. Senza questa maschera era la
+    # causa principale delle auto-collisioni da 1 segmento.
     states = env.to_state()
     q_values = q_network(states).numpy()
+    rev = reverse_actions(env)
+    has_neck = rev >= 0
+    q_values[np.where(has_neck)[0], rev[has_neck]] = -np.inf
     actions = np.argmax(q_values, axis=-1)
 
     explore = np.random.rand(env.n_boards) < epsilon
@@ -452,12 +490,14 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 60            # run breve di verifica del reward shaping (baseline: 200)
+    N_EPISODES = 60            # run breve di verifica (baseline: 200)
     VISUALIZE_EVERY = 20
 
-    # i risultati vanno in una cartella separata, cosi' quelli della baseline
-    # (reward originale) restano intatti per il confronto nel report
-    OUTPUT_DIR = "risultati_reward_shaping"
+    # ogni esperimento scrive in una cartella separata, cosi' i risultati
+    # precedenti restano intatti per il confronto nel report:
+    #   risultati_reward_shaping/  -> solo E1 (collasso passivo, E3)
+    #   risultati_mask_steppenalty -> E1 + maschera dietro-front + costo per passo
+    OUTPUT_DIR = "risultati_mask_steppenalty"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)

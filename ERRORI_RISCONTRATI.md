@@ -188,5 +188,22 @@ SPUNTI PER IL REPORT
 - La scelta di non mascherare il dietro-front (README) ha un costo: e' la
   causa dominante delle collisioni da 1 segmento.
 
-CORREZIONE
-(da definire)
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py) - in attesa di verifica
+A) Maschera sul dietro-front nella scelta greedy: il valore Q dell'azione
+   che porterebbe la testa sul collo viene posto a -inf prima dell'argmax
+   (funzione reverse_actions). Nel vero Snake e' una mossa impossibile.
+   Il collo e' ricavato dalla posizione del primo segmento del corpo, non
+   dall'ultima azione: corretto anche dopo urti contro il muro e a inizio
+   episodio. Vale anche per l'azione A' usata nel target SARSA, quindi la
+   policy valutata e quella eseguita coincidono.
+   Nota: cambia la scelta progettuale del README ("nessuna maschera, la
+   rete deve imparare da sola").
+B) Costo per passo STEP_PENALTY = -0.01, sommato al reward di ogni passo.
+   Girovagare per sempre vale -0.01 / (1 - 0.95) = -0.2 invece di 0, quindi
+   la policy passiva non e' piu' un punto di equilibrio "gratuito".
+La penalita' di auto-collisione di E1 resta invariata: -(0.5 + 0.5k).
+Verifica del codice: su 6751 stati con collo, l'azione mascherata porta
+sempre sul collo; con epsilon = 0 la policy greedy non ha mai fatto
+dietro-front ne' morso il collo.
+Verifica sperimentale: run SARSA di 60 episodi, risultati in
+sarsa_4/risultati_mask_steppenalty/. Esito: (da compilare)
