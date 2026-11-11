@@ -1,0 +1,5 @@
+questi sono i dati per l'algoritmo sarsa.
+reward_medio=28.6665178424501	frutti_mangiati=71.9717261904762	self_collision=5.99255952380952	segmenti_persi=70.7961302413827	loss_media=0.0157065150835
+questi sono i dati per l'algoritmo q-learning.
+reward_medio=29.2394345203703	frutti_mangiati=73.3988095238095	self_collision=6.47321428571429	segmenti_persi=72.2514873246352	loss_media=0.014605311224481
+
