@@ -287,4 +287,67 @@ su 32000 stati (1912 in un angolo); con epsilon = 0 nessun urto contro il
 muro e nessun dietro-front; due valutazioni consecutive danno risultati
 identici e non alterano il generatore casuale del training.
 Verifica sperimentale: run SARSA di 60 episodi, risultati in
-sarsa_4/risultati_mask_muro/. Esito: (da compilare)
+sarsa_4/risultati_mask_muro/. Esito: POSITIVO sul problema di E4.
+Urti contro il muro = 0 in tutto il training; il reward non cala piu'
+(oscilla fra -5 e -8). Lunghezza media da 3.5 a ~25, auto-collisioni da ~5
+a ~2 per episodio, ~26-34 frutti per episodio.
+Nota: a regime il reward resta negativo per costruzione. Se la lunghezza e'
+stabile, i segmenti persi sono circa pari ai frutti mangiati, quindi frutti
+e segmenti si compensano (+0.5 / -0.5 ciascuno) e resta
+  R ~ -0.01 * 500 - 0.5 * collisioni ~ -5 - 0.5 * collisioni.
+Es. ep 59: 13.05 - 1.08 - 12.36 - 5.0 = -5.39. Il reward di training misura
+quindi soprattutto il numero di collisioni.
+La valutazione separata ha pero' rivelato un nuovo problema: vedi E5.
+
+
+-------------------------------------------------------------------------------
+E5. LA POLICY GREEDY NON SA GIOCARE PARTITE NUOVE (DISTRIBUTION SHIFT + LOOP)
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-12
+Algoritmo:           SARSA con correzioni E1, E3 (A+B), E4; run di 60 episodi
+Categoria:           distribuzione degli stati di training / valutazione
+Stato:               APERTO
+
+DESCRIZIONE
+In training l'agente mangia ~30 frutti per episodio, ma la stessa rete in
+valutazione (policy greedy su partite nuove, serpente lungo 1) quasi non
+mangia: gira in loop di 2 o 4 celle. Solo un checkpoint su 7 gioca bene, e
+il risultato crolla subito dopo.
+
+EVIDENZA (sarsa_4/risultati_mask_muro/eval_history_sarsa.csv)
+  episodio di training    0    10    20    30    40    50    59
+  frutti (media 10 part.) 0.1  0.9   0.0   1.0   0.6  27.3   9.0
+  lunghezza massima       1.1  1.8   1.0   2.0   1.6  25.9   7.6
+GIF (partite nuove, epsilon = 0):
+  checkpoint 20: 0 frutti, oscillazione fra 2 celle (periodo 2)
+  checkpoint 40: 3 frutti nei primi 10 passi, poi loop di periodo 4
+  finale:        0 frutti, oscillazione fra 2 celle (periodo 2)
+
+CAUSE
+1. Distribution shift. Le board non vengono mai resettate: dopo pochi
+   episodi i serpenti in training sono lunghi (lunghezza media 10-25) e la
+   rete non vede quasi piu' stati con serpenti corti. La valutazione parte
+   invece da serpenti di lunghezza 1: stati che la rete conosce poco.
+2. Con lunghezza 1 non c'e' collo, quindi la maschera del dietro-front non
+   si applica e l'oscillazione fra 2 celle torna possibile.
+3. Con il serpente lungo 1 un loop riporta esattamente allo stesso stato:
+   policy greedy + stato identico = loop infinito. In training il loop si
+   rompe grazie all'esplorazione euristica (che va verso il frutto), in
+   valutazione (epsilon = 0) no. Parte delle prestazioni di training e'
+   quindi merito dell'euristica, non della rete.
+4. Il loop costa poco: -0.01 per passo, cioe' -0.2 in tutto con lo sconto.
+   La differenza di valore fra "loop" e "vai al frutto" e' piccola e si
+   perde nel rumore delle stime Q.
+5. Instabilita': SARSA online, senza experience replay ne' rete target. La
+   policy cambia molto tra checkpoint vicini (27.3 frutti a ep 50, 9.0 a ep 59).
+
+SPUNTI PER IL REPORT
+- Senza la valutazione separata questo problema non sarebbe emerso: le
+  metriche di training (con esplorazione e serpenti gia' lunghi) davano un
+  quadro troppo ottimistico.
+- Esempio concreto di distribution shift fra training e test in RL.
+- In un task continuo senza reset l'agente impara bene solo gli stati che
+  la sua stessa policy genera.
+
+CORREZIONE
+(da definire)
