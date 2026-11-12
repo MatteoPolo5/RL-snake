@@ -400,11 +400,17 @@ def visualize_policy(q_network, board_size, epsilon=0.0, max_steps=500, path="sn
 def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
                  epsilon_start=0.2, epsilon_end=0.02, gamma=0.95, visualize_every=None,
                  output_dir=".", csv_path="training_history_sarsa.csv", csv_every=20,
-                 eval_every=10, eval_csv_path="eval_history_sarsa.csv"):
+                 eval_every=10, eval_csv_path="eval_history_sarsa.csv",
+                 reset_each_episode=True):
     """
     visualize_every: se impostato (es. 100), ogni N episodi salva una GIF
     dell'episodio corrente giocato dalla policy appresa, così puoi controllare
     i progressi senza fermare il training.
+
+    reset_each_episode: se True (correzione E5) ogni episodio parte da board
+    nuove (serpenti lunghi 1), cosi' il training vede sempre anche l'inizio
+    della partita. Se False le partite proseguono tra un episodio e l'altro
+    (comportamento originale).
 
     eval_every: ogni N episodi (e all'ultimo) valuta la policy greedy su
     partite nuove a seed fisso (evaluate_policy) e salva i risultati in
@@ -426,7 +432,10 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
                     "self_collision": [], "segmenti_persi": [], "urti_muro": []}
 
     for episode in range(n_episodes):
-        
+        if reset_each_episode:
+            # board nuove: stessa classe e stesse dimensioni dell'ambiente
+            env.__init__(n_boards=env.n_boards, board_size=env.board_size)
+
         epsilon = epsilon_start - (epsilon_start - epsilon_end) * (episode / max(n_episodes - 1, 1))
         current_directions = np.full(env.n_boards, BaseEnvironment.NONE)
         actions = choose_actions(env, q_network, current_directions, epsilon)
@@ -611,8 +620,9 @@ if __name__ == "__main__":
     # precedenti restano intatti per il confronto nel report:
     #   risultati_reward_shaping/  -> solo E1 (collasso passivo, E3)
     #   risultati_mask_steppenalty -> E1 + maschera dietro-front + costo per passo (E4)
-    #   risultati_mask_muro        -> + maschera muro + valutazione separata
-    OUTPUT_DIR = "risultati_mask_muro"
+    #   risultati_mask_muro        -> + maschera muro + valutazione separata (E5)
+    #   risultati_reset            -> + reset delle board a ogni episodio
+    OUTPUT_DIR = "risultati_reset"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)

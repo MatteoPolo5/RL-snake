@@ -349,5 +349,24 @@ SPUNTI PER IL REPORT
 - In un task continuo senza reset l'agente impara bene solo gli stati che
   la sua stessa policy genera.
 
-CORREZIONE
-(da definire)
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py) - in attesa di verifica
+Reset delle board all'inizio di ogni episodio (parametro
+reset_each_episode=True di sarsa_train): ogni episodio parte con 32 partite
+nuove (serpenti lunghi 1), quindi il training vede sempre anche l'inizio
+della partita, come la valutazione.
+- Cambia la struttura descritta nel README: le partite non proseguono piu'
+  tra un episodio e l'altro. Con reset_each_episode=False si torna al
+  comportamento originale.
+- Effetto collaterale utile: il reward per episodio torna confrontabile tra
+  episodi diversi, perche' ogni episodio parte dalla stessa situazione.
+- La fine dell'episodio e' un troncamento per limite di tempo, non uno stato
+  terminale: l'ultimo aggiornamento continua correttamente a fare bootstrap
+  su Q(s', a') (cfr. Pardo et al., 2018, "Time Limits in Reinforcement
+  Learning").
+- Le altre cause (loop poco penalizzati, instabilita' senza replay/target)
+  restano: se i loop persistono, il passo successivo e' una penalita'
+  "fame" dopo N passi senza frutto.
+Verifica del codice: in un mini-training di 3 episodi ogni episodio e'
+ripartito da 8 board con corpo vuoto, una testa e un frutto ciascuna.
+Verifica sperimentale: run SARSA di 60 episodi, risultati in
+sarsa_4/risultati_reset/. Esito: (da compilare)
