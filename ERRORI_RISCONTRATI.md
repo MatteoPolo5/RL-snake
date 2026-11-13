@@ -390,3 +390,9 @@ Limiti residui:
   partite restano bloccate in loop;
 - a fine run le curve crescono ancora: il training non e' a convergenza;
 - un solo run e un solo seed: servono piu' seed per conclusioni solide.
+Azioni conseguenti (sarsa_4/heuristic_sarsa_snake_4.py):
+- la valutazione riporta anche frutti_min, frutti_max, partite_zero_frutti
+  e partite_bloccate (nessun frutto negli ultimi 100 passi, tipicamente un
+  loop), cosi' i loop residui sono visibili nei numeri e non solo nelle GIF;
+- nuovo run da 200 episodi (come la baseline), risultati in
+  sarsa_4/risultati_200ep/. Esito: (da compilare)

@@ -336,7 +336,8 @@ def head_positions(env):
     return np.argwhere(env.boards == BaseEnvironment.HEAD)[:, 1:]
 
 
-def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345):
+def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345,
+                    stuck_window=100):
     """
     Valutazione separata dal training (vedi E4): la policy greedy (epsilon=0)
     gioca n_games partite nuove, in parallelo, per max_steps passi.
@@ -344,7 +345,12 @@ def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345
     stesse posizioni iniziali e i risultati dei checkpoint sono confrontabili.
     Lo stato del generatore casuale del training viene salvato e ripristinato,
     cosi' la valutazione non altera il training.
-    Ritorna le metriche medie per partita.
+    Ritorna le metriche medie per partita e, per i frutti, anche minimo,
+    massimo e numero di partite problematiche, cosi' una media buona non
+    nasconde partite rimaste bloccate in loop (vedi E5, limiti residui):
+      partite_zero_frutti: partite senza nemmeno un frutto;
+      partite_bloccate:    partite senza frutti negli ultimi stuck_window
+                           passi (tipicamente un loop).
     """
     rng_state = np.random.get_state()
     np.random.seed(seed)
@@ -356,13 +362,16 @@ def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345
         lost_total = np.zeros(n_games)
         wall_hits = np.zeros(n_games)
         max_len = body_lengths(env) + 1
-        for _ in range(max_steps):
+        last_fruit_step = np.full(n_games, -1)
+        for step in range(max_steps):
             actions = choose_actions(env, q_network, directions, epsilon=0.0)
             len_before = body_lengths(env)
             heads_before = head_positions(env)
             env_rewards = env.move(actions).numpy().reshape(-1)
             lost = segments_lost_in_step(env, len_before, env_rewards)
-            fruits += np.isclose(env_rewards, env.FRUIT_REWARD)
+            ate = np.isclose(env_rewards, env.FRUIT_REWARD)
+            fruits += ate
+            last_fruit_step[ate] = step
             collisions += lost > 0
             lost_total += lost
             wall_hits += np.all(head_positions(env) == heads_before, axis=1)
@@ -371,8 +380,14 @@ def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345
     finally:
         np.random.set_state(rng_state)
 
+    # se la partita e' piu' corta della finestra, "bloccata" = nessun frutto
+    stuck = last_fruit_step < max(max_steps - stuck_window, 0)
     return {
         "frutti": float(np.mean(fruits)),
+        "frutti_min": float(np.min(fruits)),
+        "frutti_max": float(np.max(fruits)),
+        "partite_zero_frutti": int(np.sum(fruits == 0)),
+        "partite_bloccate": int(np.sum(stuck)),
         "lunghezza_max": float(np.mean(max_len)),
         "lunghezza_finale": float(np.mean(body_lengths(env) + 1)),
         "self_collision": float(np.mean(collisions)),
@@ -428,8 +443,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         "urti_muro": [],          # numero medio di urti contro il muro
         "loss_media": [],         # loss media della rete nell'episodio
     }
-    eval_history = {"episodio": [], "frutti": [], "lunghezza_max": [], "lunghezza_finale": [],
-                    "self_collision": [], "segmenti_persi": [], "urti_muro": []}
+    eval_history = {"episodio": []}   # le altre colonne arrivano da evaluate_policy
 
     for episode in range(n_episodes):
         if reset_each_episode:
@@ -514,7 +528,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
             ev = evaluate_policy(q_network, env.board_size, max_steps=max_steps)
             eval_history["episodio"].append(episode)
             for k, v in ev.items():
-                eval_history[k].append(v)
+                eval_history.setdefault(k, []).append(v)
             print(f"  [valutazione ep {episode}] " + " ".join(f"{k}={v:.2f}" for k, v in ev.items()))
             save_history_csv(eval_history, path=eval_csv_path)
 
@@ -571,18 +585,35 @@ def plot_training_history(history, path="training_history.png", window=10):
 
 def plot_eval_history(eval_history, path="eval_history.png"):
     """Grafica le metriche della valutazione periodica (policy greedy, seed fisso)."""
+    ep = eval_history["episodio"]
     fig, axes = plt.subplots(2, 3, figsize=(15, 7))
-    titles = [
-        ("frutti", "Frutti mangiati (valutazione)"),
-        ("lunghezza_max", "Lunghezza massima raggiunta"),
-        ("lunghezza_finale", "Lunghezza a fine partita"),
-        ("self_collision", "Auto-collisioni"),
-        ("segmenti_persi", "Segmenti persi"),
-        ("urti_muro", "Urti contro il muro"),
-    ]
-    for ax, (key, title) in zip(axes.flat, titles):
-        ax.plot(eval_history["episodio"], eval_history[key], marker="o")
+
+    ax = axes[0, 0]
+    ax.fill_between(ep, eval_history["frutti_min"], eval_history["frutti_max"],
+                    alpha=0.25, label="min-max sulle partite")
+    ax.plot(ep, eval_history["frutti"], marker="o", label="media")
+    ax.set_title("Frutti mangiati (valutazione)")
+    ax.legend(fontsize=8)
+
+    ax = axes[0, 1]
+    ax.plot(ep, eval_history["partite_zero_frutti"], marker="o", label="zero frutti")
+    ax.plot(ep, eval_history["partite_bloccate"], marker="s", label="bloccate (no frutti ultimi 100 passi)")
+    ax.set_title("Partite problematiche (su 10)")
+    ax.legend(fontsize=8)
+
+    ax = axes[0, 2]
+    ax.plot(ep, eval_history["lunghezza_max"], marker="o", label="massima")
+    ax.plot(ep, eval_history["lunghezza_finale"], marker="s", label="a fine partita")
+    ax.set_title("Lunghezza del serpente")
+    ax.legend(fontsize=8)
+
+    for ax, (key, title) in zip(axes[1], [("self_collision", "Auto-collisioni"),
+                                          ("segmenti_persi", "Segmenti persi"),
+                                          ("urti_muro", "Urti contro il muro")]):
+        ax.plot(ep, eval_history[key], marker="o")
         ax.set_title(title)
+
+    for ax in axes.flat:
         ax.set_xlabel("episodio di training")
     fig.suptitle("Valutazione greedy: 10 partite nuove a seed fisso, 500 passi")
     fig.tight_layout()
@@ -613,16 +644,18 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 60            # run breve di verifica (baseline: 200)
-    VISUALIZE_EVERY = 20
+    N_EPISODES = 200           # come la baseline
+    VISUALIZE_EVERY = 50
 
     # ogni esperimento scrive in una cartella separata, cosi' i risultati
     # precedenti restano intatti per il confronto nel report:
     #   risultati_reward_shaping/  -> solo E1 (collasso passivo, E3)
     #   risultati_mask_steppenalty -> E1 + maschera dietro-front + costo per passo (E4)
     #   risultati_mask_muro        -> + maschera muro + valutazione separata (E5)
-    #   risultati_reset            -> + reset delle board a ogni episodio
-    OUTPUT_DIR = "risultati_reset"
+    #   risultati_reset            -> + reset delle board a ogni episodio (60 ep)
+    #   risultati_200ep            -> stessa configurazione, 200 episodi,
+    #                                 valutazione con min/max e partite bloccate
+    OUTPUT_DIR = "risultati_200ep"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)
