@@ -511,4 +511,61 @@ dall'inizio). Non risolve i checkpoint "rotti" (ep 80, 100, 130 del run da
 e' instabilita' del training online. Se persistono, il passo successivo e'
 experience replay + rete target.
 Verifica sperimentale: run SARSA di 60 episodi, risultati in
-sarsa_4/risultati_fix_dietrofront/. Esito: (da compilare)
+sarsa_4/risultati_fix_dietrofront/. Esito: PARZIALE. Le oscillazioni di
+periodo 2 sono sparite (le partite con 0 frutti scendono a 0-3 su 20 dopo
+l'episodio 40), ma sono comparsi loop piu' lunghi dopo i primi frutti
+(vedi E8). Valutazione ancora instabile: 38.2 frutti a ep 40, 19.9 a ep 50,
+13.95 a ep 59.
+
+
+-------------------------------------------------------------------------------
+E8. LOOP LUNGHI: LA POLICY GREEDY DIPENDE DALL'ESPLORAZIONE PER MANGIARE
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-13
+Algoritmo:           SARSA fully observable, E1-E5 + fix E7, run di 60 episodi
+Categoria:           comportamento appreso / interazione con l'esplorazione
+Stato:               APERTO
+
+DESCRIZIONE
+Eliminata l'oscillazione fra due celle (E7), la policy greedy mangia alcuni
+frutti e poi entra in cicli piu' lunghi (periodo 12-20 passi) in cui gira
+senza avvicinarsi al frutto, fino alla fine della partita. In training
+invece l'agente mangia ~43 frutti per episodio in modo stabile.
+
+EVIDENZA (sarsa_4/risultati_fix_dietrofront/)
+Valutazione (20 partite):
+  episodio            20    30    40    50    59
+  frutti medi        5.05  2.8  38.2  19.9  13.95
+  partite 0 frutti     3     9     0     2     3
+  partite bloccate    20    19     7    15    16
+Le partite con 0 frutti sono poche, ma quelle bloccate (nessun frutto negli
+ultimi 100 passi) sono la maggioranza: l'agente mangia, poi si blocca.
+GIF: checkpoint 20 = 1 frutto poi ciclo di periodo 12; finale = 10 frutti
+(l'ultimo al passo 77) poi ciclo di periodo 20; checkpoint 40 = 35 frutti.
+Training (ultimi episodi): ~41-45 frutti, reward fino a +8.1.
+
+CAUSE
+1. SARSA impara il valore della policy di comportamento, cioe' epsilon-greedy
+   con esplorazione euristica. L'euristica va verso il frutto: in training
+   bastano poche azioni esplorative (epsilon ~0.02 a fine run, cioe' ~10
+   azioni euristiche per partita) per rompere un ciclo e portare al frutto.
+   La rete impara soprattutto a evitare i pericoli, mentre il compito di
+   "andare al frutto" resta in parte all'euristica. Con epsilon = 0 il
+   ciclo non si rompe. E' la stessa causa 3 di E7, in forma piu' generale:
+   correggere un loop alla volta (periodo 2, poi 4, poi 12...) non basta.
+2. Girare in tondo costa poco (-0.01 per passo) ed e' sicuro, mentre
+   avvicinarsi al frutto con un corpo lungo comporta il rischio di
+   collisioni: la differenza di valore fra le due scelte e' piccola.
+3. Instabilita' del training online (nessun replay ne' rete target): la
+   policy greedy cambia molto fra checkpoint vicini.
+
+SPUNTI PER IL REPORT
+- Gap fra policy di comportamento (training) e policy greedy (valutazione):
+  con SARSA e un'esplorazione "intelligente" la rete puo' delegare parte del
+  compito all'esplorazione. Il confronto con Q-learning (che stima i valori
+  della policy greedy) e' particolarmente interessante su questo punto.
+- In letteratura (es. DQN, Mnih et al. 2015) la valutazione si fa spesso con
+  un piccolo epsilon (0.05) proprio per evitare cicli deterministici.
+
+CORREZIONE
+(da definire)
