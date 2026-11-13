@@ -16,7 +16,8 @@ Data individuazione: 2026-11-11
 Algoritmo:           SARSA (sarsa_4); riguarda anche Q-learning (q_learning_2),
                      che usa lo stesso ambiente e gli stessi reward
 Categoria:           progettazione della funzione di reward
-Stato:               CORRETTO in SARSA (in attesa di verifica sperimentale);
+Stato:               CORRETTO in SARSA e verificato (con E3-E5); da applicare a
+                     Q-learning
                      da applicare a Q-learning
 
 DESCRIZIONE
@@ -141,7 +142,7 @@ E3. COLLASSO SU UNA POLICY PASSIVA DOPO LA CORREZIONE DEL REWARD
 Data individuazione: 2026-11-11
 Algoritmo:           SARSA con reward corretto (E1), run di 60 episodi
 Categoria:           progettazione del reward / dinamica di apprendimento
-Stato:               APERTO
+Stato:               CORRETTO in SARSA; da applicare a Q-learning
 
 DESCRIZIONE
 Con la nuova penalita' di auto-collisione l'agente smette di mangiare:
@@ -219,7 +220,7 @@ E4. IL REWARD MEDIO CALA MENTRE L'AGENTE MIGLIORA (URTI CONTRO IL MURO)
 Data individuazione: 2026-11-11
 Algoritmo:           SARSA con correzioni E1 + E3 (A+B), run di 60 episodi
 Categoria:           comportamento appreso / metrica di valutazione
-Stato:               APERTO
+Stato:               CORRETTO in SARSA; da applicare a Q-learning
 
 DESCRIZIONE
 Con le correzioni A+B l'agente fa crescere il serpente e si morde meno, ma il
@@ -306,7 +307,8 @@ E5. LA POLICY GREEDY NON SA GIOCARE PARTITE NUOVE (DISTRIBUTION SHIFT + LOOP)
 Data individuazione: 2026-11-12
 Algoritmo:           SARSA con correzioni E1, E3 (A+B), E4; run di 60 episodi
 Categoria:           distribuzione degli stati di training / valutazione
-Stato:               APERTO
+Stato:               CORRETTO in SARSA (reset per episodio); da applicare a
+                     Q-learning
 
 DESCRIZIONE
 In training l'agente mangia ~30 frutti per episodio, ma la stessa rete in
@@ -369,4 +371,22 @@ della partita, come la valutazione.
 Verifica del codice: in un mini-training di 3 episodi ogni episodio e'
 ripartito da 8 board con corpo vuoto, una testa e un frutto ciascuna.
 Verifica sperimentale: run SARSA di 60 episodi, risultati in
-sarsa_4/risultati_reset/. Esito: (da compilare)
+sarsa_4/risultati_reset/. Esito: POSITIVO.
+  valutazione (10 partite nuove, greedy)
+  episodio            0    10    20    30    40    50    59
+  frutti             0.1   0.6  15.8  17.5  19.5  21.7  23.3
+  lunghezza massima  1.1   1.6  12.1  17.8  17.1  18.3  21.8
+  training: reward da -6.7 a +9.3 (prima volta positivo e in crescita),
+  auto-collisioni da 6.1 a 1.3, segmenti persi da ~24 (picco) a 8.8,
+  lunghezza media 21.6, urti contro il muro 0.
+La valutazione cresce in modo costante dopo l'episodio 20, senza i crolli
+del run precedente. GIF: checkpoint 40 = 41 frutti, finale = 33 frutti,
+nessun loop.
+Limiti residui:
+- la GIF del checkpoint 20 e' ancora in un loop di periodo 2 con 0 frutti:
+  i loop a serpente corto non sono spariti del tutto, sono diventati rari;
+- in valutazione l'agente mangia meno che in training (23 contro 39
+  frutti): la valutazione riporta solo medie, quindi non si vede se alcune
+  partite restano bloccate in loop;
+- a fine run le curve crescono ancora: il training non e' a convergenza;
+- un solo run e un solo seed: servono piu' seed per conclusioni solide.
