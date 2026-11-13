@@ -592,4 +592,61 @@ Verifica del codice (32 board, 400 passi, policy euristica): distanze
 corrette; somma scontata di F = gamma^T * Phi_T - Phi_0; avvicinarsi da
 +0.007 a +0.019, allontanarsi da -0.021 a -0.031; ciclo di 4 stati: -0.04.
 Verifica sperimentale: run SARSA di 60 episodi, risultati in
-sarsa_4/risultati_shaping_distanza/. Esito: (da compilare)
+sarsa_4/risultati_shaping_distanza/. Esito: PARZIALE (un solo seed).
+Confronto con il run precedente (fix E7, stessi 60 episodi):
+  valutazione, frutti medi su 20 partite
+  episodio              10     20     30     40     50     59
+  senza shaping        0.85   5.05   2.8   38.2   19.9   13.95
+  con shaping         10.05  15.2   44.3   20.6    8.15  45.25
+  partite bloccate (senza / con shaping)
+                     20/17  20/14  19/2    7/18  15/19  16/4
+- Media sui checkpoint 10-59: 23.9 frutti con shaping contro 13.5 senza.
+  I checkpoint buoni arrivano prima (ep 30) e sono migliori: a ep 59
+  minimo 24 e massimo 63 frutti, 0 partite a zero frutti (il migliore
+  finora). GIF finale: 45 frutti, nessun loop.
+- Il training non cambia (frutti 41.2 contro 41.3, collisioni 2.27 contro
+  2.26, lunghezza 19.0 contro 19.5): coerente con la teoria, lo shaping non
+  cambia cosa e' ottimo, ma rende la policy greedy piu' capace di andare
+  al frutto da sola.
+- L'instabilita' resta: a ep 40 e 50 la valutazione crolla (18 e 19 partite
+  bloccate su 20, GIF ep 40 con ciclo di periodo 32). Vedi E9.
+
+
+-------------------------------------------------------------------------------
+E9. INSTABILITA' DELLA POLICY GREEDY FRA CHECKPOINT
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-13
+Algoritmo:           SARSA fully observable, configurazione completa (E1-E8)
+Categoria:           stabilita' dell'apprendimento
+Stato:               APERTO
+
+DESCRIZIONE
+La policy greedy alterna checkpoint buoni e checkpoint "rotti" a pochi
+episodi di distanza, mentre le metriche di training restano stabili.
+
+EVIDENZA (sarsa_4/risultati_shaping_distanza/, 20 partite)
+  episodio              30     40     50     59
+  frutti medi          44.3   20.6    8.15  45.25
+  partite bloccate       2     18     19      4
+Training negli stessi episodi: frutti 41.2 +- 1.2, collisioni 2.27 +- 0.33
+(ultimi 10 episodi). Lo stesso andamento c'era nel run da 200 episodi
+(E7: 38.9 frutti a ep 50, 0.9 a ep 80, 36.5 a ep 190).
+
+CAUSE
+1. Training online: ogni aggiornamento usa solo i 32 passi appena fatti,
+   molto correlati fra loro (stesse partite, passi consecutivi).
+2. Il target TD usa la stessa rete che si sta aggiornando ("moving
+   target"): ogni aggiornamento sposta anche il bersaglio.
+3. Piccole variazioni dei valori Q cambiano l'argmax in molti stati: la
+   policy greedy cambia molto anche se i valori cambiano poco. In training
+   l'esplorazione maschera l'effetto, in valutazione no.
+
+SPUNTI PER IL REPORT
+- Le metriche di training non bastano a valutare la stabilita': la policy
+  greedy puo' oscillare mentre le curve di training sono piatte.
+- Con un solo seed e checkpoint cosi' variabili, il confronto fra due
+  configurazioni e' incerto: servono piu' seed o una scelta del modello piu'
+  robusta (es. miglior checkpoint, media degli ultimi checkpoint).
+
+CORREZIONE
+(da definire)
