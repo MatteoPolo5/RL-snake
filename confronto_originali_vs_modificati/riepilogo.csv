@@ -1,0 +1,5 @@
+run,episodi,frutti_mangiati_ultimi50,self_collision_ultimi50,segmenti_persi_ultimi50,segmenti_persi_per_collisione,frutti_per_collisione
+SARSA originale,181,72.15,5.94,70.99,11.95,12.14
+Q-learning originale,181,73.6,6.58,72.32,10.99,11.18
+SARSA modificato,200,42.1,1.97,16.09,8.17,21.39
+Q-learning modificato,200,44.47,2.28,20.85,9.14,19.48
