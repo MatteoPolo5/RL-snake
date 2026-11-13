@@ -396,3 +396,39 @@ Azioni conseguenti (sarsa_4/heuristic_sarsa_snake_4.py):
   loop), cosi' i loop residui sono visibili nei numeri e non solo nelle GIF;
 - nuovo run da 200 episodi (come la baseline), risultati in
   sarsa_4/risultati_200ep/. Esito: (da compilare)
+
+
+-------------------------------------------------------------------------------
+E6. NOTA DI METODO: AMBIENTI USATI (FULLY E PARTIALLY OBSERVABLE)
+-------------------------------------------------------------------------------
+Data: 2026-11-13
+Categoria:           metodologia (non e' un errore)
+Stato:               DOCUMENTATO
+
+AMBIENTE FULLY OBSERVABLE
+Tutti gli esperimenti usano environments_fully_observable_2.py, una versione
+modificata per scelta dell'ambiente fornito (environments_fully_observable.py):
+  1) auto-collisione: -0.1 * segmenti persi (originale: -0.2 fisso);
+  2) urto contro il muro: -0.3 (originale: -0.1);
+  3) import "tensorflow.keras" (l'originale "keras.api._v2.keras" non
+     funziona con TensorFlow 2.21 / Keras 3);
+  4) move() accetta azioni con forma (n_boards,) (originale: (n_boards, 1)).
+
+AMBIENTE PARTIALLY OBSERVABLE
+environments_partially_observable_2.py e' ottenuto dal file fornito
+(environments_partially_observable.py) applicando le STESSE 4 modifiche.
+Cosi' i due ambienti differiscono solo per l'osservazione:
+  - fully:     l'agente vede tutta la board 10x10;
+  - partially: l'agente vede una finestra (2*mask_size+1)^2 centrata sulla
+               testa (5x5 con mask_size=2); fuori dalla board la finestra
+               mostra muro. Il costruttore ha in piu' il parametro mask_size.
+Verifica: con lo stesso seed e le stesse azioni (32 board, 3000 passi
+casuali, 551 auto-collisioni) i due ambienti producono board e reward
+identici; la finestra osservata coincide con la board attorno alla testa.
+
+NOTE
+- Nel training le differenze 1 e 2 rispetto all'ambiente fornito sono
+  comunque irrilevanti: la penalita' di auto-collisione e' ricalcolata
+  nello script (E1) e le mosse contro il muro sono mascherate (E4).
+- Il reward hacking di E1 esisterebbe anche con il reward fornito (-0.2
+  fisso), anzi sarebbe piu' forte.
