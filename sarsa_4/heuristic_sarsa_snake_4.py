@@ -137,6 +137,41 @@ COLLISION_SEGMENT_PENALTY = 0.5
 # vale STEP_PENALTY / (1 - gamma) = -0.01 / 0.05 = -0.2.
 STEP_PENALTY = -0.01
 
+# Reward shaping basato su potenziale (vedi E8; Ng, Harada & Russell, 1999):
+#   F(s, s') = gamma * Phi(s') - Phi(s),   Phi(s) = C * (D_MAX - d(s))
+# con d = distanza di Manhattan fra testa e frutto. Avvicinarsi al frutto da'
+# un piccolo premio, allontanarsi una piccola penalita'; per costruzione la
+# policy ottima non cambia (lungo una traiettoria F si somma a
+# gamma^T Phi(s_T) - Phi(s_0)).
+# Phi >= 0 (e non Phi = -C*d): lungo un ciclo che ritorna allo stesso stato
+# la somma di F vale (gamma - 1) * somma(Phi) <= 0, quindi girare in tondo
+# costa; con un potenziale negativo i cicli verrebbero invece premiati.
+# Quando si mangia, Phi(s') e' calcolato con il NUOVO frutto: quel passo puo'
+# avere F negativo (il nuovo frutto e' lontano), compensato in seguito
+# avvicinandosi al nuovo frutto.
+# Con C = 0.02, gamma = 0.95, D_MAX = 14 (board 10x10, area interna 8x8):
+#   avvicinarsi:   da +0.005 a +0.019 per passo
+#   allontanarsi:  da -0.020 a -0.033 per passo
+DISTANCE_SHAPING_COEF = 0.02
+
+
+def fruit_distances(env):
+    """Distanza di Manhattan fra testa e frutto per ogni board (stato vero
+    dell'ambiente, anche nel caso partially observable)."""
+    heads = np.argwhere(env.boards == BaseEnvironment.HEAD)
+    fruits = np.argwhere(env.boards == BaseEnvironment.FRUIT)
+    d = np.zeros(env.n_boards)
+    fruit_by_board = {int(f[0]): f[1:] for f in fruits}
+    for b, r, c in heads:
+        f = fruit_by_board.get(int(b))
+        d[b] = 0 if f is None else abs(r - f[0]) + abs(c - f[1])
+    return d
+
+
+def distance_potential(env):
+    d_max = 2 * (env.board_size - 3)          # massima distanza nell'area interna
+    return DISTANCE_SHAPING_COEF * (d_max - fruit_distances(env))
+
 
 def body_lengths(env):
     """Numero di segmenti di corpo (testa esclusa) per ogni board."""
@@ -451,6 +486,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         "segmenti_persi": [],     # segmenti di coda persi in totale nell'episodio
         "lunghezza_media": [],    # lunghezza media del serpente (testa inclusa) nell'episodio
         "urti_muro": [],          # numero medio di urti contro il muro
+        "shaping_distanza": [],   # somma media del termine di shaping F (E8), escluso da reward_medio
         "loss_media": [],         # loss media della rete nell'episodio
     }
     eval_history = {"episodio": []}   # le altre colonne arrivano da evaluate_policy
@@ -470,12 +506,14 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         ep_self_collision = np.zeros(env.n_boards)
         ep_length_sum = np.zeros(env.n_boards)
         ep_wall_hits = np.zeros(env.n_boards)
+        ep_shaping = np.zeros(env.n_boards)
         ep_losses = []
 
         for step in range(max_steps):
             state = env.to_state()
             len_before = body_lengths(env)
             heads_before = head_positions(env)
+            potential_before = distance_potential(env)
 
             env_rewards = env.move(actions).numpy().reshape(-1)   # esegue A, ottiene R (originale)
 
@@ -489,8 +527,13 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
 
             # reward shaping dell'auto-collisione (E1)
             rewards_np = shaped_rewards(env_rewards, segments_lost_step)
-            ep_reward += rewards_np
-            rewards = tf.constant(rewards_np.reshape(-1, 1), dtype=tf.float32)
+            ep_reward += rewards_np          # reward del compito (confrontabile con i run precedenti)
+
+            # shaping basato su potenziale sulla distanza dal frutto (E8),
+            # con lo stesso gamma del target TD
+            shaping = gamma * distance_potential(env) - potential_before
+            ep_shaping += shaping
+            rewards = tf.constant((rewards_np + shaping).reshape(-1, 1), dtype=tf.float32)
 
             #penalties = np.array([trap_penalty(env.boards[i]) for i in range(env.n_boards)],
             #                     dtype=np.float32)
@@ -523,6 +566,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         history["self_collision"].append(float(np.mean(ep_self_collision)))
         history["lunghezza_media"].append(float(np.mean(ep_length_sum / max_steps)))
         history["urti_muro"].append(float(np.mean(ep_wall_hits)))
+        history["shaping_distanza"].append(float(np.mean(ep_shaping)))
         history["loss_media"].append(float(np.mean(ep_losses)))
 
         if episode % 10 == 0:
@@ -575,8 +619,8 @@ def plot_training_history(history, path="training_history.png", window=10):
         ("segmenti_persi", "Segmenti persi per episodio"),
         ("urti_muro", "Urti contro il muro per episodio"),
         ("loss_media", "Loss media della rete"),
+        ("shaping_distanza", "Shaping sulla distanza (somma per episodio)"),
     ]
-    axes.flat[-1].axis("off")
 
     for ax, (key, title) in zip(axes.flat, titles):
         raw = history[key]
@@ -666,8 +710,10 @@ if __name__ == "__main__":
     #   risultati_200ep            -> stessa configurazione, 200 episodi,
     #                                 valutazione con min/max e partite bloccate
     #   risultati_fix_dietrofront  -> + dietro-front vietato anche a lunghezza 1,
-    #                                 valutazione su 20 partite (60 ep)
-    OUTPUT_DIR = "risultati_fix_dietrofront"
+    #                                 valutazione su 20 partite (60 ep) (E8)
+    #   risultati_shaping_distanza -> + shaping basato su potenziale sulla
+    #                                 distanza dal frutto (60 ep)
+    OUTPUT_DIR = "risultati_shaping_distanza"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)

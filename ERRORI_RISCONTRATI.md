@@ -567,5 +567,29 @@ SPUNTI PER IL REPORT
 - In letteratura (es. DQN, Mnih et al. 2015) la valutazione si fa spesso con
   un piccolo epsilon (0.05) proprio per evitare cicli deterministici.
 
-CORREZIONE
-(da definire)
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py) - in attesa di verifica
+Reward shaping basato su potenziale sulla distanza dal frutto (Ng, Harada &
+Russell, 1999), sommato al reward di ogni passo:
+  F(s, s') = gamma * Phi(s') - Phi(s),   Phi(s) = C * (D_MAX - d(s))
+  d = distanza di Manhattan testa-frutto, C = 0.02, D_MAX = 14,
+  gamma = 0.95 (lo stesso del target TD).
+- Insegna alla rete stessa ad andare verso il frutto, invece di lasciare il
+  compito all'esplorazione euristica.
+- Per costruzione non cambia la policy ottima: lungo una traiettoria la
+  somma scontata di F vale gamma^T * Phi(s_T) - Phi(s_0).
+- Phi >= 0 di proposito: lungo un ciclo che torna allo stesso stato la somma
+  di F vale (gamma - 1) * somma(Phi) <= 0, quindi girare in tondo costa. Con
+  Phi = -C*d (negativo) i cicli sarebbero stati premiati.
+- Quando si mangia, Phi(s') usa il nuovo frutto: quel passo ha F negativo
+  (in media -0.10, minimo -0.26), poi compensato avvicinandosi al nuovo
+  frutto.
+- Nel caso partially observable Phi usa la posizione vera del frutto anche
+  quando non e' visibile: e' accettabile (il reward e' un segnale
+  dell'ambiente, non un'osservazione) ma va dichiarato nel report.
+- Nel CSV "reward_medio" resta il reward del compito (senza F), confrontabile
+  con i run precedenti; F e' registrato a parte in "shaping_distanza".
+Verifica del codice (32 board, 400 passi, policy euristica): distanze
+corrette; somma scontata di F = gamma^T * Phi_T - Phi_0; avvicinarsi da
++0.007 a +0.019, allontanarsi da -0.021 a -0.031; ciclo di 4 stati: -0.04.
+Verifica sperimentale: run SARSA di 60 episodi, risultati in
+sarsa_4/risultati_shaping_distanza/. Esito: (da compilare)
