@@ -199,10 +199,16 @@ ACTION_FROM_DELTA = {
 }
 
 
-def reverse_actions(env):
+def reverse_actions(env, last_directions=None):
     """
-    Per ogni board, l'azione che porterebbe la testa sul collo (il primo
-    segmento del corpo), cioe' il dietro-front; -1 se il corpo e' vuoto.
+    Per ogni board, l'azione di dietro-front; -1 se non e' definita.
+    - Se il serpente ha un corpo: l'azione che porterebbe la testa sul collo
+      (il primo segmento del corpo).
+    - Se il serpente e' lungo 1 (corpo vuoto, vedi E7): l'opposto dell'ultima
+      direzione di movimento (last_directions), come nel vero Snake, dove il
+      dietro-front e' vietato anche senza corpo. Senza questa regola il
+      serpente lungo 1 poteva oscillare fra due celle all'infinito.
+      All'inizio della partita (direzione NONE) non c'e' dietro-front.
     Si usa la posizione del collo e non l'ultima azione presa, cosi' il
     risultato e' corretto anche dopo un urto contro il muro o all'inizio di
     un episodio. Dopo un urto contro il muro l'ambiente inserisce in testa al
@@ -216,6 +222,9 @@ def reverse_actions(env):
             if delta != (0, 0):
                 rev[i] = ACTION_FROM_DELTA.get(delta, -1)
                 break
+    if last_directions is not None:
+        for i in np.where(rev < 0)[0]:
+            rev[i] = OPPOSITE_DIRECTION.get(int(last_directions[i]), -1)
     return rev
 
 
@@ -246,7 +255,7 @@ def choose_actions(env, q_network, current_directions, epsilon):
     states = env.to_state()
     q_values = q_network(states).numpy()
     q_values[wall_actions_mask(env)] = -np.inf
-    rev = reverse_actions(env)
+    rev = reverse_actions(env, current_directions)
     has_neck = rev >= 0
     q_values[np.where(has_neck)[0], rev[has_neck]] = -np.inf
     actions = np.argmax(q_values, axis=-1)
@@ -336,7 +345,7 @@ def head_positions(env):
     return np.argwhere(env.boards == BaseEnvironment.HEAD)[:, 1:]
 
 
-def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345,
+def evaluate_policy(q_network, board_size, n_games=20, max_steps=500, seed=12345,
                     stuck_window=100):
     """
     Valutazione separata dal training (vedi E4): la policy greedy (epsilon=0)
@@ -383,6 +392,7 @@ def evaluate_policy(q_network, board_size, n_games=10, max_steps=500, seed=12345
     # se la partita e' piu' corta della finestra, "bloccata" = nessun frutto
     stuck = last_fruit_step < max(max_steps - stuck_window, 0)
     return {
+        "n_partite": n_games,
         "frutti": float(np.mean(fruits)),
         "frutti_min": float(np.min(fruits)),
         "frutti_max": float(np.max(fruits)),
@@ -598,7 +608,7 @@ def plot_eval_history(eval_history, path="eval_history.png"):
     ax = axes[0, 1]
     ax.plot(ep, eval_history["partite_zero_frutti"], marker="o", label="zero frutti")
     ax.plot(ep, eval_history["partite_bloccate"], marker="s", label="bloccate (no frutti ultimi 100 passi)")
-    ax.set_title("Partite problematiche (su 10)")
+    ax.set_title(f"Partite problematiche (su {eval_history['n_partite'][-1]})")
     ax.legend(fontsize=8)
 
     ax = axes[0, 2]
@@ -615,7 +625,7 @@ def plot_eval_history(eval_history, path="eval_history.png"):
 
     for ax in axes.flat:
         ax.set_xlabel("episodio di training")
-    fig.suptitle("Valutazione greedy: 10 partite nuove a seed fisso, 500 passi")
+    fig.suptitle(f"Valutazione greedy: {eval_history['n_partite'][-1]} partite nuove a seed fisso, 500 passi")
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
@@ -644,8 +654,8 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 200           # come la baseline
-    VISUALIZE_EVERY = 50
+    N_EPISODES = 60            # run di prova del fix E7 (dietro-front a lunghezza 1)
+    VISUALIZE_EVERY = 20
 
     # ogni esperimento scrive in una cartella separata, cosi' i risultati
     # precedenti restano intatti per il confronto nel report:
@@ -655,7 +665,9 @@ if __name__ == "__main__":
     #   risultati_reset            -> + reset delle board a ogni episodio (60 ep)
     #   risultati_200ep            -> stessa configurazione, 200 episodi,
     #                                 valutazione con min/max e partite bloccate
-    OUTPUT_DIR = "risultati_200ep"
+    #   risultati_fix_dietrofront  -> + dietro-front vietato anche a lunghezza 1,
+    #                                 valutazione su 20 partite (60 ep)
+    OUTPUT_DIR = "risultati_fix_dietrofront"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)

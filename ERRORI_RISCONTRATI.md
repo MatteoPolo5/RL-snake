@@ -395,7 +395,8 @@ Azioni conseguenti (sarsa_4/heuristic_sarsa_snake_4.py):
   e partite_bloccate (nessun frutto negli ultimi 100 passi, tipicamente un
   loop), cosi' i loop residui sono visibili nei numeri e non solo nelle GIF;
 - nuovo run da 200 episodi (come la baseline), risultati in
-  sarsa_4/risultati_200ep/. Esito: (da compilare)
+  sarsa_4/risultati_200ep/. Esito: training buono, valutazione instabile
+  (vedi E7).
 
 
 -------------------------------------------------------------------------------
@@ -432,3 +433,82 @@ NOTE
   nello script (E1) e le mosse contro il muro sono mascherate (E4).
 - Il reward hacking di E1 esisterebbe anche con il reward fornito (-0.2
   fisso), anzi sarebbe piu' forte.
+
+
+-------------------------------------------------------------------------------
+E7. LOOP DI PARTENZA: LA POLICY GREEDY OSCILLA CON IL SERPENTE LUNGO 1
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-13
+Algoritmo:           SARSA fully observable, configurazione completa
+                     (E1-E5), run di 200 episodi
+Categoria:           comportamento appreso / regole del gioco
+Stato:               APERTO
+
+DESCRIZIONE
+In training l'agente migliora in modo costante, ma in valutazione (greedy,
+partite nuove) le partite si dividono in due gruppi: o vanno bene (40-60
+frutti) o restano bloccate fin dal primo passo senza mangiare nulla. Il
+serpente, lungo 1, oscilla avanti e indietro fra due celle per 500 passi.
+La quota di partite bloccate cambia molto da un checkpoint all'altro, per
+questo la media della valutazione salta su e giu'.
+
+EVIDENZA (sarsa_4/risultati_200ep/)
+Training: reward da -5.8 a +7.7, auto-collisioni da 5.7 a ~2, segmenti
+persi da ~26 a ~12-17, frutti ~44, lunghezza media ~22, urti muro 0.
+Valutazione (10 partite):
+  episodio            40    50    80   130   160   170   180   190   199
+  frutti medi        24.5  38.9   0.9   0.1  21.1  19.4  21.9  36.5  34.3
+  frutti max         40    55     4     1    55    46    50    53    62
+  partite 0 frutti    2     1     7     9     5     5     5     0     3
+  partite bloccate    4     1    10    10     5     5     5     1     3
+Nella maggior parte dei checkpoint "partite con 0 frutti" = "partite
+bloccate": le partite bloccate non hanno mai mangiato, cioe' si bloccano
+all'inizio. Quando la partita parte, l'agente gioca bene.
+GIF: checkpoint 100, 150 e finale = 0 frutti, oscillazione di periodo 2 dal
+primo passo; checkpoint 50 = 44 frutti.
+
+CAUSE
+1. Con il serpente lungo 1 non c'e' collo, quindi la maschera del
+   dietro-front (E3) non si applica e l'oscillazione fra due celle e'
+   permessa. Nel vero Snake il dietro-front e' vietato anche in questo caso.
+2. Con lunghezza 1 lo stato dopo due passi e' identico: una policy greedy
+   deterministica che sceglie A -> B e B -> A non ne esce piu'.
+3. Natura on-policy di SARSA: impara il valore della policy epsilon-greedy,
+   in cui l'esplorazione (euristica) prima o poi rompe il loop e porta al
+   frutto. Il valore stimato degli stati di loop include quindi questo
+   "salvataggio" e non risulta abbastanza negativo da far cambiare la scelta
+   greedy. Con epsilon = 0 il salvataggio non c'e'.
+4. Gli stati con serpente lungo 1 sono pochi nei dati di training (solo i
+   primi passi di ogni episodio, finche' non si mangia il primo frutto), e
+   senza experience replay ne' rete target la policy su questi stati cambia
+   molto fra un checkpoint e l'altro.
+
+SPUNTI PER IL REPORT
+- Differenza fra prestazioni della policy di comportamento (epsilon-greedy,
+  training) e della policy greedy (valutazione): con SARSA la differenza e'
+  strutturale, perche' i valori appresi sono quelli della policy con
+  esplorazione. Da confrontare con Q-learning, che stima i valori della
+  policy greedy.
+- Le medie della valutazione nascondono una distribuzione bimodale: servono
+  anche min/max e conteggi delle partite bloccate.
+
+CORREZIONE (sarsa_4/heuristic_sarsa_snake_4.py) - in attesa di verifica
+1) Dietro-front vietato anche con il serpente lungo 1: quando il corpo e'
+   vuoto, la maschera esclude l'opposto dell'ultima direzione di movimento
+   (reverse_actions con last_directions). E' la regola del vero Snake e
+   completa la maschera di E3. All'inizio della partita (direzione NONE)
+   non c'e' dietro-front da escludere.
+2) Valutazione su 20 partite invece di 10, per ridurre l'incertezza sulla
+   media (la varianza fra partite buone, ~25-60 frutti, e' naturale perche'
+   dipende da dove compaiono i frutti).
+Verifica del codice: rete non addestrata, policy greedy, 3 seed x 32 board
+x 300 passi (circa 19800 passi a lunghezza 1): nessun ritorno A -> B -> A.
+Restano possibili loop piu' lunghi (es. giro su un quadrato 2x2).
+
+Varianza: il fix risolve la componente principale (partite bloccate
+dall'inizio). Non risolve i checkpoint "rotti" (ep 80, 100, 130 del run da
+200 episodi), in cui anche le partite partite mangiano solo 1-3 frutti:
+e' instabilita' del training online. Se persistono, il passo successivo e'
+experience replay + rete target.
+Verifica sperimentale: run SARSA di 60 episodi, risultati in
+sarsa_4/risultati_fix_dietrofront/. Esito: (da compilare)
