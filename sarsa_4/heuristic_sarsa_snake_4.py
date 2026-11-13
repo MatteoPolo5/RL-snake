@@ -278,6 +278,20 @@ def wall_actions_mask(env):
     return env.boards[b, next_cells[..., 0], next_cells[..., 1]] == BaseEnvironment.WALL
 
 
+def allowed_actions_mask(env, last_directions):
+    """
+    Maschera booleana (n_boards, 4): True per le mosse permesse dalle regole,
+    cioe' tutte tranne quelle contro il muro (E4) e il dietro-front (E3, E7).
+    Usata sia per la scelta dell'azione sia (in Q-learning) per il max del
+    target, cosi' le due parti seguono le stesse regole.
+    """
+    allowed = ~wall_actions_mask(env)
+    rev = reverse_actions(env, last_directions)
+    has_rev = rev >= 0
+    allowed[np.where(has_rev)[0], rev[has_rev]] = False
+    return allowed
+
+
 def choose_actions(env, q_network, current_directions, epsilon):
     # La scelta greedy esclude le mosse che violano le regole del gioco:
     # - correzione A (E3): il dietro-front, mossa impossibile nel vero Snake
@@ -289,10 +303,7 @@ def choose_actions(env, q_network, current_directions, epsilon):
     # cio' che la rete deve imparare.
     states = env.to_state()
     q_values = q_network(states).numpy()
-    q_values[wall_actions_mask(env)] = -np.inf
-    rev = reverse_actions(env, current_directions)
-    has_neck = rev >= 0
-    q_values[np.where(has_neck)[0], rev[has_neck]] = -np.inf
+    q_values[~allowed_actions_mask(env, current_directions)] = -np.inf
     actions = np.argmax(q_values, axis=-1)
 
     explore = np.random.rand(env.n_boards) < epsilon
@@ -698,8 +709,8 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 60            # run di prova del fix E7 (dietro-front a lunghezza 1)
-    VISUALIZE_EVERY = 20
+    N_EPISODES = 200           # configurazione finale, come gli originali
+    VISUALIZE_EVERY = 50
 
     # ogni esperimento scrive in una cartella separata, cosi' i risultati
     # precedenti restano intatti per il confronto nel report:
@@ -713,7 +724,9 @@ if __name__ == "__main__":
     #                                 valutazione su 20 partite (60 ep) (E8)
     #   risultati_shaping_distanza -> + shaping basato su potenziale sulla
     #                                 distanza dal frutto (60 ep)
-    OUTPUT_DIR = "risultati_shaping_distanza"
+    #   risultati_finale_200ep     -> configurazione finale (E1-E8), 200 episodi,
+    #                                 da confrontare con l'originale e con Q-learning
+    OUTPUT_DIR = "risultati_finale_200ep"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)

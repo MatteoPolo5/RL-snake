@@ -650,3 +650,36 @@ SPUNTI PER IL REPORT
 
 CORREZIONE
 (da definire)
+
+
+-------------------------------------------------------------------------------
+E10. GLI ORIGINALI DI SARSA E Q-LEARNING NON USANO LO STESSO EPSILON
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-13
+Algoritmo:           originali (sarsa_4/heuristic_sarsa_snake_4_originale.py,
+                     q_learning_2/heuristic_Q-learn_snake_2.py)
+Categoria:           metodologia / equita' del confronto
+Stato:               CORRETTO nelle versioni modificate
+
+DESCRIZIONE
+Il README dichiara che i due script hanno "stesso schema di epsilon", ma
+negli originali:
+  SARSA:      epsilon decrescente linearmente da 0.2 a 0.02
+  Q-learning: epsilon COSTANTE a 0.15
+Gli altri parametri coincidono (200 episodi da 500 passi, 32 board, stessa
+rete, stesso ambiente). Lo script Q-learning originale contiene anche una
+copia di sarsa_train (con parametri diversi: 1000 episodi da 200 passi,
+epsilon 0.1) che pero' non viene eseguita.
+
+CONSEGUENZE
+Il confronto fra i due originali non e' alla pari: con epsilon 0.15 fisso
+Q-learning esplora (cioe' usa l'euristica) molto piu' di SARSA nella seconda
+meta' del training. Quando si confrontano i numeri degli originali va
+dichiarato.
+
+CORREZIONE
+Le versioni modificate (sarsa_4/heuristic_sarsa_snake_4.py e
+q_learning_2/heuristic_qlearning_snake_2_modificato.py) sono generate dallo
+stesso codice e differiscono SOLO nel target del TD: stesso epsilon
+(0.2 -> 0.02), stessi reward, maschere, reset, metriche, valutazione.
+Verificato con un diff fra i due file.
