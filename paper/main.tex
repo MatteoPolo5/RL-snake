@@ -234,14 +234,23 @@ Measured as fruits per self-collision, efficiency rises from about 12 to about 2
 The comparison is not perfectly controlled: the original scripts do not reset the games between episodes, so an episode measures a different slice of play, and they use different $\varepsilon$ schedules (SARSA $0.2\to0.02$, Q-learning constant $0.15$).
 The fruit gap is therefore not only a cost of caution. The effect on collisions and lost segments, however, is large and consistent in both algorithms.
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \begin{center}
-\centerline{\includegraphics[width=\textwidth]{figures/training_2x2.pdf}}
-\caption{Training curves of the $2\times2$ design (moving average over 10 episodes). Colour: algorithm; solid: fully observable (FO); dashed: partially observable (PO, $5\times5$ window).}
-\label{fig:train}
+\centerline{\includegraphics[width=\columnwidth]{figures/training_growth.pdf}}
+\caption{Training: fruits per episode (top) and mean snake length (bottom), moving average over 10 episodes. Colour: algorithm; solid: fully observable (FO); dashed: partially observable (PO, $5\times5$ window).}
+\label{fig:growth}
 \end{center}
 \vskip -0.3in
-\end{figure*}
+\end{figure}
+
+\begin{figure}[t]
+\begin{center}
+\centerline{\includegraphics[width=\columnwidth]{figures/training_safety.pdf}}
+\caption{Training: self-collisions (top) and segments lost (bottom) per episode, same encoding as Figure~\ref{fig:growth}. Both keep decreasing until the end of training.}
+\label{fig:safety}
+\end{center}
+\vskip -0.3in
+\end{figure}
 
 \begin{table}[t]
 \caption{$2\times2$ comparison. Training: mean of the last 50 episodes. Greedy: mean over checkpoints $\ge 100$ (20 games each); stuck = games with no fruit in the last 100 steps.}
@@ -268,7 +277,9 @@ Q-learn., PO   & 39.3 & 1.54 & 19.1 & 16.7 & 16.1 & 13.4 \\
 \end{table}
 
 \subsection{SARSA vs Q-learning, FO vs PO}
-Table~\ref{tab:2x2} and Figures~\ref{fig:train}--\ref{fig:eval} report the $2\times2$ design.
+Table~\ref{tab:2x2} and Figures~\ref{fig:growth}--\ref{fig:eval} report the $2\times2$ design.
+
+\textbf{Fruits vs length.} In FO, fruits per episode peak at about 45--48 between episodes 20 and 100 and then decrease to 42--44 (Figure~\ref{fig:growth}), while the snake keeps growing and collisions keep falling (Figure~\ref{fig:safety}). The agent trades fruits for safety: a longer body needs longer, safer paths to the fruit. The numbers in Table~\ref{tab:2x2} are taken at the end of training, after this trade-off.
 
 \textbf{Algorithm (FO).} Q-learning eats slightly more (44.5 vs 42.1) but bites more often (2.28 vs 1.97) and loses about 30\% more segments (20.9 vs 16.1).
 This is the textbook difference \cite{sutton2018}: SARSA learns the value of the exploring policy, so it prices in the occasional wrong move near the body and keeps a safer margin, while Q-learning values the greedy path and takes tighter routes.
@@ -284,7 +295,7 @@ Under PO the two algorithms are indistinguishable.
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/eval_2x2.pdf}}
-\caption{Greedy evaluation every 10 episodes (20 new games, fixed seed). Top: mean fruits per game. Bottom: stuck games. PO (dashed) has more stuck games, and all four configurations change abruptly between checkpoints.}
+\caption{Greedy evaluation ($\varepsilon=0$, 20 new games, fixed seed) of every checkpoint from episode 100 on: one dot per checkpoint, black line = mean. Top: fruits per game; bottom: stuck games. Filled: FO; hollow: PO. The spread of the dots shows the instability between checkpoints.}
 \label{fig:eval}
 \end{center}
 \vskip -0.3in

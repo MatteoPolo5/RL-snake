@@ -90,46 +90,64 @@ def fig_orig_vs_mod():
     plt.close(fig)
 
 
-def fig_training_2x2():
+def _training_panels(metrics, fname):
     data = {n: load(os.path.join(p, f"training_history_{a}.csv")) for n, (p, a, _, _) in RUNS_2X2.items()}
-    metrics = [("frutti_mangiati", "Fruits / episode"),
-               ("self_collision", "Self-collisions / episode"),
-               ("segmenti_persi", "Segments lost / episode"),
-               ("lunghezza_media", "Mean snake length")]
-    fig, axes = plt.subplots(1, 4, figsize=(7, 1.75))
+    fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.5), sharex=True)
     for ax, (k, yl) in zip(axes, metrics):
         for n, (_, _, c, ls) in RUNS_2X2.items():
             d = data[n]
+            ax.plot(d["episodio"], d[k], color=c, lw=0.5, alpha=0.15)
             ma = np.convolve(d[k], np.ones(SMOOTH) / SMOOTH, mode="valid")
-            ax.plot(d["episodio"][SMOOTH - 1:], ma, color=c, ls=ls, lw=1.2, label=n)
-        ax.set_xlabel("Episode")
+            ax.plot(d["episodio"][SMOOTH - 1:], ma, color=c, ls=ls, lw=1.4, label=n)
         ax.set_ylabel(yl)
         ax.set_ylim(bottom=0)
         clean(ax)
-    axes[0].legend(frameon=False, loc="lower right", handlelength=2.2)
-    fig.tight_layout(pad=0.3)
-    fig.savefig(os.path.join(OUT, "training_2x2.pdf"))
+    axes[-1].set_xlabel("Training episode")
+    fig.legend(*axes[0].get_legend_handles_labels(), frameon=False, ncol=4, loc="upper center",
+               handlelength=2.0, columnspacing=0.8, fontsize=6.3)
+    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
+    fig.savefig(os.path.join(OUT, fname))
     plt.close(fig)
 
 
+def fig_training_2x2():
+    # crescita: frutti e lunghezza
+    _training_panels([("frutti_mangiati", "Fruits / episode"),
+                      ("lunghezza_media", "Mean snake length")], "training_growth.pdf")
+    # sicurezza: auto-collisioni e segmenti persi
+    _training_panels([("self_collision", "Self-collisions / episode"),
+                      ("segmenti_persi", "Segments lost / episode")], "training_safety.pdf")
+
+
 def fig_eval_2x2():
+    """Un punto per checkpoint (dall'episodio EVAL_FROM), linea nera = media.
+    Mostra sia il livello medio sia la variabilita' fra checkpoint."""
     names = list(RUNS_2X2)
     ev = {n: load(os.path.join(p, f"eval_history_{a}.csv")) for n, (p, a, _, _) in RUNS_2X2.items()}
-    fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.3), sharex=True)
-    for n, (_, _, c, ls) in RUNS_2X2.items():
-        e = ev[n]
-        axes[0].plot(e["episodio"], e["frutti"], color=c, ls=ls, lw=1.1, marker="o", ms=2.2, label=n)
-        axes[1].plot(e["episodio"], e["partite_bloccate"], color=c, ls=ls, lw=1.1, marker="o", ms=2.2)
-    axes[0].set_ylabel("Greedy: fruits / game")
-    axes[1].set_ylabel("Greedy: stuck games (of 20)")
-    axes[1].set_xlabel("Training episode")
-    axes[0].set_ylim(bottom=0)
-    axes[1].set_ylim(0, 20.5)
-    fig.legend(*axes[0].get_legend_handles_labels(), frameon=False, ncol=4, loc="upper center",
-               handlelength=2.0, columnspacing=0.8, fontsize=6.3)
-    for ax in axes:
+    labels = [n.replace(", ", "\n") for n in names]
+    rng = np.random.default_rng(0)
+    fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.4), sharex=True)
+    for ax, (k, yl) in zip(axes, [("frutti", "Greedy: fruits / game"),
+                                   ("partite_bloccate", "Greedy: stuck games (of 20)")]):
+        for i, n in enumerate(names):
+            _, _, c, ls = RUNS_2X2[n]
+            e = ev[n]
+            v = e[k][e["episodio"] >= EVAL_FROM]
+            x = i + rng.uniform(-0.15, 0.15, len(v))
+            filled = ls == "-"
+            ax.scatter(x, v, s=12, facecolors=c if filled else "white", edgecolors=c, lw=0.8, zorder=3)
+            m = v.mean()
+            ax.plot([i - 0.3, i + 0.3], [m, m], color="black", lw=1.4, zorder=4)
+            ax.text(i + 0.33, m, f"{m:.1f}", va="center", fontsize=6.5)
+        ax.set_ylabel(yl)
+        ax.set_ylim(bottom=0)
         clean(ax)
-    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
+        ax.grid(axis="x", visible=False)
+    axes[1].set_ylim(0, 20.5)
+    axes[1].set_xticks(range(4))
+    axes[1].set_xticklabels([n.replace(", ", "\n") for n in names], fontsize=6.8)
+    axes[1].set_xlim(-0.5, 3.75)
+    fig.tight_layout(pad=0.3)
     fig.savefig(os.path.join(OUT, "eval_2x2.pdf"))
     plt.close(fig)
 
