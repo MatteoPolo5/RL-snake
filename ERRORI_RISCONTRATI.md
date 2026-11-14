@@ -705,3 +705,54 @@ q_learning_2/heuristic_qlearning_snake_2_modificato.py) sono generate dallo
 stesso codice e differiscono SOLO nel target del TD: stesso epsilon
 (0.2 -> 0.02), stessi reward, maschere, reset, metriche, valutazione.
 Verificato con un diff fra i due file.
+
+
+-------------------------------------------------------------------------------
+E11. PARTIALLY OBSERVABLE: LA POLICY GREEDY SI BLOCCA IN LOOP (ALIASING)
+-------------------------------------------------------------------------------
+Data individuazione: 2026-11-14
+Algoritmo:           SARSA e Q-learning modificati, OSSERVABILITA="partial"
+                     (finestra 5x5), 200 episodi
+Categoria:           limite dell'osservabilita' parziale (atteso)
+Stato:               DOCUMENTATO (risultato da discutere nel paper)
+
+DESCRIZIONE
+In training (con esplorazione) il partially observable va quasi come il
+fully observable. In valutazione greedy invece crolla: la maggior parte
+delle partite resta bloccata in un loop senza mangiare.
+
+EVIDENZA (risultati_po_200ep/ vs risultati_finale_200ep/)
+Training, ultimi 50 episodi:
+                     frutti  auto-coll.  segm. persi  lunghezza
+  SARSA fully         42.1      1.97        16.1        20.3
+  QL fully            44.5      2.28        20.9        19.3
+  SARSA partial       39.0      1.60        18.5        16.8
+  QL partial          39.3      1.54        19.1        16.7
+Valutazione greedy (20 partite), media dei checkpoint dall'episodio 100:
+  SARSA fully 29.7, QL fully 27.2, SARSA partial 17.5, QL partial 16.1.
+Partite bloccate per checkpoint: fully tipicamente 3-12 su 20, partial
+tipicamente 13-20 su 20 (miglior checkpoint partial: 39 frutti, 2 bloccate).
+
+CAUSA
+Aliasing percettivo: con la finestra 5x5 molte situazioni diverse (frutto
+fuori vista in posizioni diverse) producono la STESSA osservazione. Una
+policy greedy senza memoria e' deterministica: stessa osservazione -> stessa
+azione, quindi l'agente puo' ripetere lo stesso giro all'infinito senza mai
+vedere il frutto. In training il loop viene rotto dall'esplorazione (euristica
+con scelte casuali), per questo i numeri di training restano buoni.
+E' il risultato noto per i POMDP: le policy deterministiche senza memoria
+possono essere molto peggiori di quelle stocastiche (Singh, Jaakkola &
+Jordan 1994).
+
+CONSEGUENZE PER IL PAPER
+- Il divario fully vs partial si vede soprattutto in valutazione greedy,
+  non in training.
+- Nel partial la differenza SARSA vs Q-learning e' minima (entro la
+  variabilita' fra checkpoint, E9).
+- Le auto-collisioni piu' basse nel partial dipendono anche dal serpente
+  piu' corto (lunghezza ~17 contro ~20).
+
+POSSIBILI INTERVENTI (non applicati)
+- valutare anche con piccola casualita' (es. epsilon 0.05) per misurare
+  quanto del crollo e' dovuto al determinismo;
+- dare memoria all'agente (stack degli ultimi k frame o rete ricorrente).
