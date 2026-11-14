@@ -434,6 +434,28 @@ NOTE
 - Il reward hacking di E1 esisterebbe anche con il reward fornito (-0.2
   fisso), anzi sarebbe piu' forte.
 
+CONFIGURAZIONE DEGLI ESPERIMENTI PARTIALLY OBSERVABLE (2026-11-13)
+Gli script modificati di SARSA e Q-learning hanno un unico parametro
+OSSERVABILITA ("fully" | "partial", MASK_SIZE = 2). In "partial":
+  - stato della rete: finestra 5x5x4 (input della rete 5x5 invece di
+    10x10; stessa architettura);
+  - esplorazione euristica: riceve solo la finestra 5x5. Se il frutto non
+    e' visibile sceglie a caso fra le mosse sicure (niente muro, corpo,
+    dietro-front);
+  - restano identici: reward (incluso lo shaping sulla distanza), maschere
+    muro/dietro-front (guardano solo le celle adiacenti alla testa, sempre
+    visibili), valutazione, iperparametri, reset per episodio.
+  - risultati in risultati_po_200ep/ (fully: risultati_finale_200ep/).
+Nota per il paper: lo shaping sulla distanza (E8) e' calcolato
+dall'ambiente con la posizione reale del frutto. Nel caso partial il
+reward porta quindi un'informazione indiretta sulla direzione del frutto
+anche quando questo non e' nella finestra. E' legittimo (il reward
+appartiene all'ambiente, non all'osservazione), ma va dichiarato; e'
+mantenuto per avere lo stesso reward nelle 4 celle del confronto.
+Verifica: per 300 passi su 32 board la finestra data all'euristica
+coincide con to_state(); mini-training di 2 episodi completato per
+entrambi gli algoritmi.
+
 
 -------------------------------------------------------------------------------
 E7. LOOP DI PARTENZA: LA POLICY GREEDY OSCILLA CON IL SERPENTE LUNGO 1

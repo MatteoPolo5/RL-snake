@@ -15,7 +15,53 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from collections import deque
 import matplotlib.animation as animation
-from environments_fully_observable_2 import BaseEnvironment, OriginalSnakeEnvironment
+from environments_fully_observable_2 import BaseEnvironment   # costanti comuni ai due ambienti
+import environments_fully_observable_2 as env_fully
+import environments_partially_observable_2 as env_partial
+
+# ---------------------------------------------------------------------------
+# 0) OSSERVABILITA' (confronto 2x2 del paper: algoritmo x ambiente)
+# ---------------------------------------------------------------------------
+# "fully":   l'agente vede l'intera board 10x10.
+# "partial": l'agente vede solo una finestra (2*MASK_SIZE+1)^2 centrata sulla
+#            testa (fuori board = muro). Reward, maschere, valutazione e
+#            iperparametri restano identici: cambia solo cio' che l'agente
+#            osserva (stato e input dell'euristica di esplorazione).
+#            Nota: lo shaping sulla distanza usa la posizione reale del frutto
+#            (il reward e' dell'ambiente), anche quando il frutto non e' visibile.
+OSSERVABILITA = "fully"   # "fully" | "partial"
+MASK_SIZE = 2             # finestra 5x5
+
+
+def make_env(n_boards, board_size):
+    if OSSERVABILITA == "partial":
+        return env_partial.OriginalSnakeEnvironment(n_boards=n_boards, board_size=board_size,
+                                                    mask_size=MASK_SIZE)
+    return env_fully.OriginalSnakeEnvironment(n_boards=n_boards, board_size=board_size)
+
+
+def reset_env(env):
+    """Nuove board con gli stessi parametri dell'ambiente (reset per episodio)."""
+    if OSSERVABILITA == "partial":
+        env.__init__(n_boards=env.n_boards, board_size=env.board_size, mask_size=env.mask_size)
+    else:
+        env.__init__(n_boards=env.n_boards, board_size=env.board_size)
+
+
+def observation_size(board_size):
+    """Lato dell'osservazione che entra nella rete."""
+    return 2 * MASK_SIZE + 1 if OSSERVABILITA == "partial" else board_size
+
+
+def visible_boards(env):
+    """Board come le vede l'agente: intere (fully) o finestra attorno alla testa
+    (partial, stessa costruzione di to_state(): padding con WALL=0)."""
+    if OSSERVABILITA != "partial":
+        return env.boards
+    m = MASK_SIZE
+    padded = np.pad(env.boards, ((0, 0), (m, m), (m, m)), constant_values=BaseEnvironment.WALL)
+    heads = np.argwhere(padded == BaseEnvironment.HEAD)
+    return np.array([padded[b, r - m:r + m + 1, c - m:c + m + 1] for b, r, c in heads])
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +355,7 @@ def choose_actions(env, q_network, current_directions, epsilon):
     explore = np.random.rand(env.n_boards) < epsilon
     if explore.any():
         idx = np.where(explore)[0]
-        actions[idx] = heuristic_actions_batch(env.boards[idx], current_directions[idx])
+        actions[idx] = heuristic_actions_batch(visible_boards(env)[idx], current_directions[idx])
 
     return actions.astype(np.int32)
 
@@ -410,7 +456,7 @@ def evaluate_policy(q_network, board_size, n_games=20, max_steps=500, seed=12345
     rng_state = np.random.get_state()
     np.random.seed(seed)
     try:
-        env = OriginalSnakeEnvironment(n_boards=n_games, board_size=board_size)
+        env = make_env(n_games, board_size)
         directions = np.full(n_games, BaseEnvironment.NONE)
         fruits = np.zeros(n_games)
         collisions = np.zeros(n_games)
@@ -457,7 +503,7 @@ def visualize_policy(q_network, board_size, epsilon=0.0, max_steps=500, path="sn
     Crea un piccolo ambiente dedicato (1 board), ci fa giocare la policy
     corrente e salva il risultato come GIF.
     """
-    eval_env = OriginalSnakeEnvironment(n_boards=1, board_size=board_size)
+    eval_env = make_env(1, board_size)
     frames, total_reward = record_episode(eval_env, q_network, board_index=0,
                                            max_steps=max_steps, epsilon=epsilon)
     save_episode_gif(frames, path=path)
@@ -505,7 +551,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
     for episode in range(n_episodes):
         if reset_each_episode:
             # board nuove: stessa classe e stesse dimensioni dell'ambiente
-            env.__init__(n_boards=env.n_boards, board_size=env.board_size)
+            reset_env(env)
 
         epsilon = epsilon_start - (epsilon_start - epsilon_end) * (episode / max(n_episodes - 1, 1))
         current_directions = np.full(env.n_boards, BaseEnvironment.NONE)
@@ -726,11 +772,13 @@ if __name__ == "__main__":
     #                                 distanza dal frutto (60 ep)
     #   risultati_finale_200ep     -> configurazione finale (E1-E8), 200 episodi,
     #                                 da confrontare con l'originale e con Q-learning
-    OUTPUT_DIR = "risultati_finale_200ep"
+    #   risultati_po_200ep         -> stessa configurazione, ambiente partially
+    #                                 observable (finestra 5x5)
+    OUTPUT_DIR = "risultati_finale_200ep" if OSSERVABILITA == "fully" else "risultati_po_200ep"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    env = OriginalSnakeEnvironment(n_boards=N_BOARDS, board_size=BOARD_SIZE)
-    q_network = build_q_network(BOARD_SIZE)
+    env = make_env(N_BOARDS, BOARD_SIZE)
+    q_network = build_q_network(observation_size(BOARD_SIZE))
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
     history, eval_history = sarsa_train(env, q_network, optimizer, n_episodes=N_EPISODES, epsilon_start=0.2,
