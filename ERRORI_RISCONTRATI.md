@@ -839,3 +839,43 @@ SPUNTI PER IL REPORT
 Punire il sintomo (il loop) non basta: serve un segnale che indichi la
 direzione utile. E' anche un argomento a favore dello shaping basato su
 potenziale: guida l'apprendimento senza cambiare il compito.
+
+
+-------------------------------------------------------------------------------
+E13. CORREZIONE PROPOSTA PER E9: LEARNING RATE DECRESCENTE (COSENO)
+-------------------------------------------------------------------------------
+Data: 2026-11-22
+Algoritmo:           SARSA e Q-learning modificati, fully observable,
+                     configurazione finale (E1-E8), 200 episodi
+Categoria:           stabilita' dell'apprendimento
+Stato:               IN ATTESA DEI RUN
+
+MOTIVAZIONE
+La policy greedy alterna checkpoint buoni e "rotti" (E9). Una delle cause e'
+l'ampiezza degli aggiornamenti: con learning rate fisso 1e-3 anche a fine
+training ogni passo puo' cambiare l'argmax in molti stati. Rete target ed
+experience replay sono stati esclusi per mantenere gli algoritmi nella loro
+forma online di base.
+
+IMPLEMENTAZIONE (identica nei due script; LR_DECAY = True/False)
+- Learning rate da 1e-3 (LR_INITIAL) a 1e-4 (LR_FINAL) con curva a coseno
+  (tf.keras CosineDecay, alpha = 0.1), su tutti gli aggiornamenti del
+  training: 200 episodi x 500 passi = 100000 passi di Adam.
+- All'inizio resta vicino a 1e-3 (si impara come prima); a meta' training
+  vale ~5.5e-4; alla fine 1e-4.
+- Nuova colonna "learning_rate" nel CSV di training e nel log a schermo.
+- Risultati in risultati_lr_decay_200ep/ (partially observable:
+  risultati_lr_decay_po_200ep/). Con LR_DECAY = False si riproduce la
+  configurazione di risultati_finale_200ep.
+Verifica del codice: mini-training di 2 episodi da 50 passi -> learning rate
+5.5e-4 dopo il primo episodio e 1e-4 alla fine, 100 passi di Adam; stesso
+comportamento in SARSA e Q-learning.
+
+COME SI VALUTA (checkpoint dall'episodio 100, confronto con
+risultati_finale_200ep, stesso seed)
+  - deviazione standard dei frutti in valutazione fra checkpoint (oggi ~10);
+  - checkpoint "rotti" con meno di 10 frutti (oggi 1 su 11 per entrambi);
+  - partite bloccate medie (oggi 7.0 SARSA, 8.4 Q-learning);
+  - la media dei frutti in valutazione non deve scendere (29.7 / 27.2).
+Limite: un solo seed, ~11 checkpoint: le differenze vanno lette come
+tendenza.

@@ -209,9 +209,30 @@ DISTANCE_SHAPING_COEF = 0.02
 # circa -0.6 se ripetuto per sempre: piu' di -0.2 ma meno di una collisione (-1).
 # A differenza di E8 NON e' basata su potenziale: cambia la policy ottima e
 # dipende da una memoria che la rete non vede tutta (solo il corpo).
-SHAPING = "rivisita"        # "distanza" (E8) | "rivisita" (E12)
+SHAPING = "distanza"        # "distanza" (E8) | "rivisita" (E12)
 REVISIT_WINDOW = 20
 REVISIT_PENALTY = -0.02
+
+# Learning rate decrescente (vedi E13, contro l'instabilita' di E9): parte da
+# LR_INITIAL e scende con una curva a coseno fino a LR_FINAL alla fine del
+# training, aggiornamento per aggiornamento (n_episodi x passi per episodio).
+# All'inizio resta vicino a LR_INITIAL (si impara veloce come prima), verso la
+# fine i passi sono ~10 volte piu' piccoli e la policy greedy cambia meno fra
+# un checkpoint e l'altro. Con LR_DECAY = False il learning rate e' fisso.
+LR_DECAY = True
+LR_INITIAL = 1e-3
+LR_FINAL = 1e-4
+
+
+def make_optimizer(n_episodes, max_steps):
+    if LR_DECAY:
+        lr = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=LR_INITIAL,
+            decay_steps=n_episodes * max_steps,      # un aggiornamento per passo
+            alpha=LR_FINAL / LR_INITIAL)              # valore finale = LR_FINAL
+    else:
+        lr = LR_INITIAL
+    return tf.keras.optimizers.Adam(learning_rate=lr)
 
 
 def new_head_history(env):
@@ -578,6 +599,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         "shaping_distanza": [],   # somma media del termine di shaping F (E8), escluso da reward_medio
         "rivisite": [],           # passi in caselle ripercorse (E12), contati con qualsiasi SHAPING
         "loss_media": [],         # loss media della rete nell'episodio
+        "learning_rate": [],      # learning rate a fine episodio (E13)
     }
     eval_history = {"episodio": []}   # le altre colonne arrivano da evaluate_policy
 
@@ -667,6 +689,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         history["shaping_distanza"].append(float(np.mean(ep_shaping)))
         history["rivisite"].append(float(np.mean(ep_revisits)))
         history["loss_media"].append(float(np.mean(ep_losses)))
+        history["learning_rate"].append(float(optimizer.learning_rate))
 
         if episode % 10 == 0:
             print(f"Episodio {episode}: reward={history['reward_medio'][-1]:.2f} "
@@ -675,7 +698,8 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
                   f"segm_persi={history['segmenti_persi'][-1]:.1f} "
                   f"lunghezza={history['lunghezza_media'][-1]:.2f} "
                   f"muro={history['urti_muro'][-1]:.1f} "
-                  f"loss={history['loss_media'][-1]:.4f}")
+                  f"loss={history['loss_media'][-1]:.4f} "
+                  f"lr={history['learning_rate'][-1]:.2e}")
 
         if eval_every and (episode % eval_every == 0 or episode == n_episodes - 1):
             ev = evaluate_policy(q_network, env.board_size, max_steps=max_steps)
@@ -798,8 +822,9 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 60           # configurazione finale, come gli originali
-    VISUALIZE_EVERY = 20
+    N_EPISODES = 200           # configurazione finale, come gli originali
+    VISUALIZE_EVERY = 50
+    MAX_STEPS = 500
 
     # ogni esperimento scrive in una cartella separata, cosi' i risultati
     # precedenti restano intatti per il confronto nel report:
@@ -820,17 +845,22 @@ if __name__ == "__main__":
     #   risultati_rivisita         -> come shaping_distanza ma con la penalita'
     #                                 per le caselle ripercorse al posto dello
     #                                 shaping sulla distanza (SHAPING="rivisita", 60 ep) (E12)
+    #   risultati_lr_decay_200ep   -> configurazione finale + learning rate a
+    #                                 coseno da 1e-3 a 1e-4 (E13); partially
+    #                                 observable: risultati_lr_decay_po_200ep
     if SHAPING == "rivisita":
         OUTPUT_DIR = "risultati_rivisita" if OSSERVABILITA == "fully" else "risultati_rivisita_po"
+    elif LR_DECAY:
+        OUTPUT_DIR = "risultati_lr_decay_200ep" if OSSERVABILITA == "fully" else "risultati_lr_decay_po_200ep"
     else:
         OUTPUT_DIR = "risultati_finale_200ep" if OSSERVABILITA == "fully" else "risultati_po_200ep"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = make_env(N_BOARDS, BOARD_SIZE)
     q_network = build_q_network(observation_size(BOARD_SIZE))
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    optimizer = make_optimizer(N_EPISODES, MAX_STEPS)
 
-    history, eval_history = sarsa_train(env, q_network, optimizer, n_episodes=N_EPISODES, epsilon_start=0.2,
+    history, eval_history = sarsa_train(env, q_network, optimizer, n_episodes=N_EPISODES, max_steps=MAX_STEPS, epsilon_start=0.2,
                            epsilon_end=0.02, visualize_every=VISUALIZE_EVERY, csv_every=20,
                            output_dir=OUTPUT_DIR,
                            csv_path=os.path.join(OUTPUT_DIR, "training_history_sarsa.csv"),
