@@ -200,6 +200,38 @@ STEP_PENALTY = -0.01
 #   allontanarsi:  da -0.020 a -0.033 per passo
 DISTANCE_SHAPING_COEF = 0.02
 
+# Alternativa allo shaping sulla distanza (vedi E12): penalita' per le
+# caselle ripercorse. Per ogni board si ricordano le ultime REVISIT_WINDOW
+# posizioni della testa; se la testa entra in una di queste caselle il passo
+# riceve REVISIT_PENALTY. Quando il serpente mangia la memoria si azzera
+# (ripassare dopo un frutto e' lecito): si puniscono solo i giri senza mangiare.
+# Con -0.02 un giro costa circa -0.03 a passo (insieme a STEP_PENALTY), cioe'
+# circa -0.6 se ripetuto per sempre: piu' di -0.2 ma meno di una collisione (-1).
+# A differenza di E8 NON e' basata su potenziale: cambia la policy ottima e
+# dipende da una memoria che la rete non vede tutta (solo il corpo).
+SHAPING = "rivisita"        # "distanza" (E8) | "rivisita" (E12)
+REVISIT_WINDOW = 20
+REVISIT_PENALTY = -0.02
+
+
+def new_head_history(env):
+    """Memoria delle ultime posizioni della testa, una per board."""
+    return [deque([tuple(h)], maxlen=REVISIT_WINDOW) for h in head_positions(env)]
+
+
+def revisit_penalties(env, head_history, ate):
+    """Penalita' (<= 0) per le teste entrate in una casella ripercorsa.
+    Aggiorna head_history; ate = board in cui e' stato mangiato un frutto."""
+    penalties = np.zeros(env.n_boards)
+    for b, h in enumerate(head_positions(env)):
+        h = tuple(h)
+        if ate[b]:
+            head_history[b].clear()
+        elif h in head_history[b]:
+            penalties[b] = REVISIT_PENALTY
+        head_history[b].append(h)
+    return penalties
+
 
 def fruit_distances(env):
     """Distanza di Manhattan fra testa e frutto per ogni board (stato vero
@@ -544,6 +576,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         "lunghezza_media": [],    # lunghezza media del serpente (testa inclusa) nell'episodio
         "urti_muro": [],          # numero medio di urti contro il muro
         "shaping_distanza": [],   # somma media del termine di shaping F (E8), escluso da reward_medio
+        "rivisite": [],           # passi in caselle ripercorse (E12), contati con qualsiasi SHAPING
         "loss_media": [],         # loss media della rete nell'episodio
     }
     eval_history = {"episodio": []}   # le altre colonne arrivano da evaluate_policy
@@ -564,6 +597,8 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         ep_length_sum = np.zeros(env.n_boards)
         ep_wall_hits = np.zeros(env.n_boards)
         ep_shaping = np.zeros(env.n_boards)
+        ep_revisits = np.zeros(env.n_boards)
+        head_history = new_head_history(env)
         ep_losses = []
 
         for step in range(max_steps):
@@ -588,7 +623,13 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
 
             # shaping basato su potenziale sulla distanza dal frutto (E8),
             # con lo stesso gamma del target TD
-            shaping = gamma * distance_potential(env) - potential_before
+            ate = np.isclose(env_rewards, env.FRUIT_REWARD) | np.isclose(env_rewards, env.WIN_REWARD)
+            revisit = revisit_penalties(env, head_history, ate)
+            ep_revisits += (revisit < 0)
+            if SHAPING == "rivisita":
+                shaping = revisit                                   # E12
+            else:
+                shaping = gamma * distance_potential(env) - potential_before   # E8
             ep_shaping += shaping
             rewards = tf.constant((rewards_np + shaping).reshape(-1, 1), dtype=tf.float32)
 
@@ -624,6 +665,7 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
         history["lunghezza_media"].append(float(np.mean(ep_length_sum / max_steps)))
         history["urti_muro"].append(float(np.mean(ep_wall_hits)))
         history["shaping_distanza"].append(float(np.mean(ep_shaping)))
+        history["rivisite"].append(float(np.mean(ep_revisits)))
         history["loss_media"].append(float(np.mean(ep_losses)))
 
         if episode % 10 == 0:
@@ -667,7 +709,7 @@ def plot_training_history(history, path="training_history.png", window=10):
         kernel = np.ones(window) / window
         return np.convolve(values, kernel, mode="valid")
 
-    fig, axes = plt.subplots(2, 4, figsize=(19, 7))
+    fig, axes = plt.subplots(3, 3, figsize=(16, 11))
     titles = [
         ("reward_medio", "Reward medio per episodio"),
         ("frutti_mangiati", "Frutti mangiati per episodio"),
@@ -676,7 +718,8 @@ def plot_training_history(history, path="training_history.png", window=10):
         ("segmenti_persi", "Segmenti persi per episodio"),
         ("urti_muro", "Urti contro il muro per episodio"),
         ("loss_media", "Loss media della rete"),
-        ("shaping_distanza", "Shaping sulla distanza (somma per episodio)"),
+        ("shaping_distanza", "Termine di shaping (somma per episodio)"),
+        ("rivisite", "Passi su caselle ripercorse per episodio"),
     ]
 
     for ax, (key, title) in zip(axes.flat, titles):
@@ -755,8 +798,8 @@ def save_history_csv(history, path="training_history.csv"):
 if __name__ == "__main__":
     BOARD_SIZE = 10
     N_BOARDS = 32
-    N_EPISODES = 200           # configurazione finale, come gli originali
-    VISUALIZE_EVERY = 50
+    N_EPISODES = 60           # configurazione finale, come gli originali
+    VISUALIZE_EVERY = 20
 
     # ogni esperimento scrive in una cartella separata, cosi' i risultati
     # precedenti restano intatti per il confronto nel report:
@@ -774,7 +817,13 @@ if __name__ == "__main__":
     #                                 da confrontare con l'originale e con Q-learning
     #   risultati_po_200ep         -> stessa configurazione, ambiente partially
     #                                 observable (finestra 5x5)
-    OUTPUT_DIR = "risultati_finale_200ep" if OSSERVABILITA == "fully" else "risultati_po_200ep"
+    #   risultati_rivisita         -> come shaping_distanza ma con la penalita'
+    #                                 per le caselle ripercorse al posto dello
+    #                                 shaping sulla distanza (SHAPING="rivisita", 60 ep) (E12)
+    if SHAPING == "rivisita":
+        OUTPUT_DIR = "risultati_rivisita" if OSSERVABILITA == "fully" else "risultati_rivisita_po"
+    else:
+        OUTPUT_DIR = "risultati_finale_200ep" if OSSERVABILITA == "fully" else "risultati_po_200ep"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = make_env(N_BOARDS, BOARD_SIZE)

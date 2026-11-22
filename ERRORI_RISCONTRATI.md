@@ -756,3 +756,52 @@ POSSIBILI INTERVENTI (non applicati)
 - valutare anche con piccola casualita' (es. epsilon 0.05) per misurare
   quanto del crollo e' dovuto al determinismo;
 - dare memoria all'agente (stack degli ultimi k frame o rete ricorrente).
+
+
+-------------------------------------------------------------------------------
+E12. ESPERIMENTO: PENALITA' PER LE CASELLE RIPERCORSE AL POSTO DELLO SHAPING
+-------------------------------------------------------------------------------
+Data: 2026-11-22
+Algoritmo:           SARSA fully observable, E1-E7 (senza shaping sulla
+                     distanza), run di 60 episodi
+Categoria:           progettazione del reward / alternativa a E8
+Stato:               IN ATTESA DEL RUN
+
+MOTIVAZIONE
+Il problema di E8 (dopo pochi frutti la policy greedy gira in tondo su un
+anello di 12-20 caselle) e' stato ridotto con lo shaping sulla distanza dal
+frutto. Si vuole verificare se una penalita' che colpisce direttamente i
+loop ottiene lo stesso effetto.
+
+IMPLEMENTAZIONE (heuristic_sarsa_snake_4.py e, identica, nello script
+Q-learning modificato; interruttore SHAPING = "distanza" | "rivisita")
+- Per ogni board si ricordano le ultime W = 20 posizioni della testa
+  (REVISIT_WINDOW); se la testa entra in una di queste caselle il passo
+  riceve p = -0.02 (REVISIT_PENALTY), al posto del termine F di E8.
+- Quando il serpente mangia la memoria si azzera: si puniscono solo i giri
+  senza mangiare.
+- Un giro costa circa -0.03 a passo (con STEP_PENALTY), circa -0.6 se
+  ripetuto per sempre: piu' di -0.2 (solo costo per passo) ma meno di una
+  auto-collisione (-1 o meno), per non spingere l'agente a mordersi.
+- Nuova metrica "rivisite" (passi su caselle ripercorse per episodio),
+  registrata con qualsiasi valore di SHAPING.
+- Risultati in sarsa_4/risultati_rivisita/.
+Verifica del codice: giro 2x2 con serpente lungo 1 -> penalita' dal quarto
+passo in poi; memoria azzerata quando si mangia; finestra limitata a 20
+posizioni; mini-training: termine di shaping = -0.02 x rivisite.
+
+DIFFERENZE TEORICHE RISPETTO A E8 (da discutere nel paper)
+- Non indica la direzione del frutto: punisce il giro ma non dice dove
+  andare.
+- Non e' basata su potenziale: cambia la policy ottima (Ng et al., 1999 non
+  si applica).
+- Dipende da una memoria che la rete vede solo in parte (il corpo mostra le
+  ultime L posizioni, non le ultime 20): stessa board, penalita' diverse,
+  quindi target piu' rumorosi.
+- Un serpente lungo a volte deve ripassare vicino: l'azzeramento quando
+  mangia attenua il problema.
+
+CONFRONTO PREVISTO (stessi 60 episodi, valutazione su 20 partite)
+  risultati_fix_dietrofront   -> nessun termine aggiuntivo (E7)
+  risultati_shaping_distanza  -> shaping sulla distanza (E8)
+  risultati_rivisita          -> penalita' per caselle ripercorse (E12)
