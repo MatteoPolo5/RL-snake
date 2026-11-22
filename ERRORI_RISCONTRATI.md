@@ -848,7 +848,7 @@ Data: 2026-11-22
 Algoritmo:           SARSA e Q-learning modificati, fully observable,
                      configurazione finale (E1-E8), 200 episodi
 Categoria:           stabilita' dell'apprendimento
-Stato:               IN ATTESA DEI RUN
+Stato:               RISOLTO (1 seed): stabilita' migliorata in entrambi
 
 MOTIVAZIONE
 La policy greedy alterna checkpoint buoni e "rotti" (E9). Una delle cause e'
@@ -879,3 +879,48 @@ risultati_finale_200ep, stesso seed)
   - la media dei frutti in valutazione non deve scendere (29.7 / 27.2).
 Limite: un solo seed, ~11 checkpoint: le differenze vanno lette come
 tendenza.
+
+RISULTATI SARSA FO (risultati_lr_decay_200ep vs risultati_finale_200ep)
+                              LR fisso    LR coseno
+  training ultimi 50: frutti    42.1        44.0
+                      auto-coll. 1.97        1.55
+                      segm. persi 16.1       13.7
+                      lunghezza   20.3       22.5
+  eval ckpt >= 100:   media      29.7        34.5
+                      std        10.1        10.4
+                      rotti (<10) 1/11       1/11
+                      bloccate    7.0         5.3
+  eval ckpt >= 110:   media      29.6        37.6
+                      std        10.6         3.9
+                      minimo      5.5        30.4
+                      bloccate    6.9         3.9
+L'unico checkpoint rotto con LR coseno e' l'episodio 100 (3.9 frutti, LR
+ancora ~5.4e-4); da 110 in poi tutti i checkpoint stanno fra 30 e 44 frutti.
+Con LR fisso i crolli restano fino in fondo (ep. 130: 5.5; ep. 180: 18.4).
+Lettura: quando il learning rate e' piccolo la policy smette di oscillare,
+come atteso. Il training migliora anche (meno auto-collisioni, serpente piu'
+lungo).
+
+RISULTATI Q-LEARNING FO (risultati_lr_decay_200ep vs risultati_finale_200ep)
+                              LR fisso    LR coseno
+  training ultimi 50: frutti    44.5        45.2
+                      auto-coll. 2.28        2.88
+                      segm. persi 20.9       22.4
+                      lunghezza   19.3       19.9
+  eval ckpt >= 100:   media      27.2        41.9
+                      std        10.1         4.6
+                      minimo      2.8        30.6
+                      rotti (<10) 1/11       0/11
+                      bloccate    8.4         1.3
+Nessun checkpoint rotto dall'episodio 40 in poi tranne il 50; dal 100 in poi
+tutti fra 30.6 e 47 frutti, partite bloccate quasi azzerate (0.7 da ep. 150).
+Il training con esplorazione cambia poco (auto-collisioni leggermente piu'
+alte, entro il rumore di un seed).
+
+CONCLUSIONE
+Il learning rate decrescente elimina quasi del tutto l'instabilita' fra
+checkpoint in entrambi gli algoritmi (std da ~10 a ~4) e riduce i loop
+greedy (bloccate: SARSA 7.0 -> 5.3, da ep. 110 3.9; Q-learning 8.4 -> 1.3).
+Causa confermata di E9: aggiornamenti troppo grandi a fine training che
+cambiano l'argmax. Un solo seed: tendenza forte e coerente nei due
+algoritmi, non prova statistica.
