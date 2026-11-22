@@ -765,7 +765,7 @@ Data: 2026-11-22
 Algoritmo:           SARSA fully observable, E1-E7 (senza shaping sulla
                      distanza), run di 60 episodi
 Categoria:           progettazione del reward / alternativa a E8
-Stato:               IN ATTESA DEL RUN
+Stato:               ESITO NEGATIVO (si mantiene lo shaping di E8)
 
 MOTIVAZIONE
 Il problema di E8 (dopo pochi frutti la policy greedy gira in tondo su un
@@ -805,3 +805,37 @@ CONFRONTO PREVISTO (stessi 60 episodi, valutazione su 20 partite)
   risultati_fix_dietrofront   -> nessun termine aggiuntivo (E7)
   risultati_shaping_distanza  -> shaping sulla distanza (E8)
   risultati_rivisita          -> penalita' per caselle ripercorse (E12)
+
+ESITO (sarsa_4/risultati_rivisita/, 60 episodi): NEGATIVO
+Training (ultimi 10 episodi), quasi uguale agli altri due run:
+                       frutti  coll.  segm.persi  lunghezza
+  senza termine (E7)    41.3   2.26     17.5        19.5
+  shaping distanza (E8) 41.2   2.27     18.0        19.0
+  rivisita (E12)        41.2   2.08     16.4        19.5
+Passi su caselle ripercorse in training: da ~121 (ep 0) a ~5 per episodio.
+Valutazione greedy (20 partite), frutti medi:
+  episodio            10    20    30    40    50    59   media 10-59
+  senza termine      0.8   5.0   2.8  38.2  19.9  13.9     13.5
+  shaping distanza  10.1  15.2  44.3  20.6   8.2  45.2     23.9
+  rivisita           2.8   9.9   2.8  42.3   0.9   9.8     11.4
+Partite bloccate (media 10-59): 16.2 / 12.3 / 16.2.
+GIF: checkpoint 20 = 3 frutti poi ciclo di periodo 12; finale = 6 frutti
+(l'ultimo al passo 66) poi ciclo di periodo 10; checkpoint 40 = 49 frutti.
+
+LETTURA
+- In training la penalita' funziona: le caselle ripercorse crollano. Ma in
+  training i loop li rompeva gia' l'esplorazione euristica.
+- In valutazione greedy i loop restano (periodo 10-12, cioe' dentro la
+  finestra di 20 passi: la penalita' scatta a ogni passo del giro, eppure la
+  policy non ne esce). La penalita' dice che il giro e' male, ma non dove
+  andare: uscire dal giro porta in stati che la rete non sa valutare meglio.
+  Lo shaping sulla distanza invece da' una direzione a ogni passo.
+- Risultato in valutazione equivalente a non avere alcun termine (11.4
+  contro 13.5, entro la variabilita' fra checkpoint, E9); lo shaping resta
+  nettamente migliore (23.9).
+- Un solo seed: il confronto va letto come tendenza.
+
+SPUNTI PER IL REPORT
+Punire il sintomo (il loop) non basta: serve un segnale che indichi la
+direzione utile. E' anche un argomento a favore dello shaping basato su
+potenziale: guida l'apprendimento senza cambiare il compito.
