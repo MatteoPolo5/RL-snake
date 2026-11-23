@@ -18,11 +18,13 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+# configurazione finale: learning rate a coseno (E13). I run a learning rate
+# fisso sono in risultati_finale_200ep / risultati_po_200ep.
 RUNS = {
-    "SARSA fully": ("sarsa_4/risultati_finale_200ep", "sarsa"),
-    "Q-learning fully": ("q_learning_2/risultati_finale_200ep", "qlearning"),
-    "SARSA partial": ("sarsa_4/risultati_po_200ep", "sarsa"),
-    "Q-learning partial": ("q_learning_2/risultati_po_200ep", "qlearning"),
+    "SARSA fully": ("sarsa_4/risultati_lr_decay_200ep", "sarsa"),
+    "Q-learning fully": ("q_learning_2/risultati_lr_decay_200ep", "qlearning"),
+    "SARSA partial": ("sarsa_4/risultati_lr_decay_po_200ep", "sarsa"),
+    "Q-learning partial": ("q_learning_2/risultati_lr_decay_po_200ep", "qlearning"),
 }
 STYLE = {
     "SARSA fully": dict(color="#2a78d6", ls="-"),

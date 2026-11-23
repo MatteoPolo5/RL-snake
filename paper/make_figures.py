@@ -29,17 +29,26 @@ OUT = "figures"
 BLUE, ORANGE = "#2a78d6", "#eb6834"
 LAST, SMOOTH, EVAL_FROM = 50, 10, 100
 
+# configurazione finale: learning rate a coseno 1e-3 -> 1e-4 (E13)
 RUNS_2X2 = {
-    "SARSA, FO": ("sarsa_4/risultati_finale_200ep", "sarsa", BLUE, "-"),
-    "Q-learning, FO": ("q_learning_2/risultati_finale_200ep", "qlearning", ORANGE, "-"),
-    "SARSA, PO": ("sarsa_4/risultati_po_200ep", "sarsa", BLUE, "--"),
-    "Q-learning, PO": ("q_learning_2/risultati_po_200ep", "qlearning", ORANGE, "--"),
+    "SARSA, FO": ("sarsa_4/risultati_lr_decay_200ep", "sarsa", BLUE, "-"),
+    "Q-learning, FO": ("q_learning_2/risultati_lr_decay_200ep", "qlearning", ORANGE, "-"),
+    "SARSA, PO": ("sarsa_4/risultati_lr_decay_po_200ep", "sarsa", BLUE, "--"),
+    "Q-learning, PO": ("q_learning_2/risultati_lr_decay_po_200ep", "qlearning", ORANGE, "--"),
 }
+# stessi run con learning rate fisso 1e-3 (prima di E13)
+RUNS_FIXED_LR = {
+    "SARSA, FO": "sarsa_4/risultati_finale_200ep",
+    "Q-learning, FO": "q_learning_2/risultati_finale_200ep",
+    "SARSA, PO": "sarsa_4/risultati_po_200ep",
+    "Q-learning, PO": "q_learning_2/risultati_po_200ep",
+}
+GREY = "#9a9a9a"
 RUNS_ORIG = {
     "SARSA\noriginal": ("sarsa_4/training_history_sarsa.csv", BLUE, True),
     "Q-learning\noriginal": ("q_learning_2/training_history_qlearning.csv", ORANGE, True),
-    "SARSA\nmodified": ("sarsa_4/risultati_finale_200ep/training_history_sarsa.csv", BLUE, False),
-    "Q-learning\nmodified": ("q_learning_2/risultati_finale_200ep/training_history_qlearning.csv", ORANGE, False),
+    "SARSA\nmodified": ("sarsa_4/risultati_lr_decay_200ep/training_history_sarsa.csv", BLUE, False),
+    "Q-learning\nmodified": ("q_learning_2/risultati_lr_decay_200ep/training_history_qlearning.csv", ORANGE, False),
 }
 
 
@@ -152,9 +161,38 @@ def fig_eval_2x2():
     plt.close(fig)
 
 
+def fig_lr_fixed_vs_cosine():
+    """Frutti in valutazione greedy per checkpoint: learning rate fisso (grigio)
+    contro coseno (colore), un pannello per cella del 2x2. Mostra le
+    oscillazioni fra checkpoint che il coseno elimina (E9, E13)."""
+    fig, axes = plt.subplots(2, 2, figsize=(3.3, 2.9), sharex=True, sharey=True)
+    for ax, (n, (p, a, c, _)) in zip(axes.flat, RUNS_2X2.items()):
+        fixed = load(os.path.join(RUNS_FIXED_LR[n], f"eval_history_{a}.csv"))
+        cos = load(os.path.join(p, f"eval_history_{a}.csv"))
+        ax.plot(fixed["episodio"], fixed["frutti"], color=GREY, lw=1.0, marker="o", ms=2,
+                label="fixed LR")
+        ax.plot(cos["episodio"], cos["frutti"], color=c, lw=1.2, marker="o", ms=2,
+                label="cosine LR")
+        ax.text(0.03, 0.95, n, transform=ax.transAxes, va="top", fontsize=6.8)
+        ax.set_ylim(0, 50)
+        clean(ax)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Greedy fruits / game")
+    for ax in axes[1]:
+        ax.set_xlabel("Training episode")
+    handles = [plt.Line2D([], [], color=GREY, lw=1.0, marker="o", ms=2),
+               plt.Line2D([], [], color="black", lw=1.2, marker="o", ms=2)]
+    fig.legend(handles, ["fixed LR 1e-3", "cosine LR 1e-3 to 1e-4 (colour)"],
+               frameon=False, ncol=2, loc="upper center", fontsize=6.3)
+    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.93))
+    fig.savefig(os.path.join(OUT, "lr_fixed_vs_cosine.pdf"))
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     fig_orig_vs_mod()
     fig_training_2x2()
     fig_eval_2x2()
+    fig_lr_fixed_vs_cosine()
     print("figure salvate in", OUT)
