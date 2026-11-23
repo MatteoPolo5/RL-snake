@@ -924,3 +924,24 @@ greedy (bloccate: SARSA 7.0 -> 5.3, da ep. 110 3.9; Q-learning 8.4 -> 1.3).
 Causa confermata di E9: aggiornamenti troppo grandi a fine training che
 cambiano l'argmax. Un solo seed: tendenza forte e coerente nei due
 algoritmi, non prova statistica.
+
+RISULTATI PARTIALLY OBSERVABLE (risultati_lr_decay_po_200ep vs
+risultati_po_200ep), checkpoint >= 100
+                              SARSA fisso -> coseno   Q-learning fisso -> coseno
+  training ultimi 50: frutti    39.0 -> 41.5            39.3 -> 42.4
+                      auto-coll. 1.60 -> 1.71            1.54 -> 1.62
+  eval:               media     17.5 -> 39.2            16.1 -> 37.6
+                      std       11.2 ->  3.3            12.2 ->  7.1
+                      rotti      4/11 -> 0/11            4/11 -> 0/11
+                      bloccate  13.1 ->  1.4            13.4 ->  2.5
+  eval ckpt >= 150:   media     12.7 -> 40.8            15.1 -> 41.0
+                      bloccate  14.8 ->  0.5            14.0 ->  0.8
+Effetto ancora piu' forte che in fully observable. Con il coseno la
+valutazione greedy PO (~40 frutti) e' allo stesso livello di FO.
+
+CONSEGUENZA PER E11
+Gran parte dei loop greedy attribuiti all'aliasing percettivo in PO (E11)
+era in realta' instabilita' da learning rate fisso: con il coseno le
+partite bloccate scendono da ~13 a ~1-2 su 20. L'aliasing resta possibile in
+teoria (finestra 5x5, policy senza memoria) ma, con questa finestra e questo
+shaping, non e' il fattore dominante. Un solo seed.
