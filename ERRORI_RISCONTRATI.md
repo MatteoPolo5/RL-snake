@@ -945,3 +945,77 @@ era in realta' instabilita' da learning rate fisso: con il coseno le
 partite bloccate scendono da ~13 a ~1-2 su 20. L'aliasing resta possibile in
 teoria (finestra 5x5, policy senza memoria) ma, con questa finestra e questo
 shaping, non e' il fattore dominante. Un solo seed.
+
+-------------------------------------------------------------------------------
+E14. ESPERIMENTO: NESSUNO SHAPING + LEARNING RATE A COSENO
+-------------------------------------------------------------------------------
+Data: 2026-11-23
+Algoritmo:           SARSA e Q-learning modificati, configurazione finale
+                     (E1-E7, E13) SENZA lo shaping sulla distanza (E8)
+Categoria:           esperimento esplorativo
+Stato:               CONCLUSO (1 seed): lo shaping non serve con il coseno
+
+MOTIVAZIONE
+Lo shaping sulla distanza (E8) era stato introdotto con learning rate fisso,
+per ridurre i cicli della policy greedy. Il coseno (E13) ha poi eliminato
+gran parte dei loop: si vuole vedere come si comporta l'agente senza shaping,
+cioe' senza nessuna informazione sulla posizione del frutto nel reward
+(rilevante soprattutto in partially observable).
+
+IMPLEMENTAZIONE (identica nei due script)
+- SHAPING = "nessuno": il termine di shaping e' 0; reward, maschere, reset,
+  esplorazione e learning rate a coseno invariati.
+- Risultati in risultati_no_shaping_lr_decay_200ep/ (partially observable:
+  risultati_no_shaping_lr_decay_po_200ep/).
+Verifica del codice: mini-training di 2 episodi da 50 passi su 4 board ->
+shaping 0 in ogni episodio, nessun errore, in SARSA e Q-learning.
+
+RISULTATI FULLY OBSERVABLE (risultati_no_shaping_lr_decay_200ep)
+                              SARSA     Q-learning
+  training ultimi 50: frutti   45.9       47.5
+                      auto-coll. 1.77      2.15
+                      segm. persi 13.7      19.3
+                      lunghezza   22.9      21.8
+  eval ckpt >= 100:   media     37.7       38.5
+                      std        9.2        8.5
+                      minimo    15.9       14.7
+                      rotti (<10) 0/11      0/11
+                      bloccate    4.1        3.0
+Senza shaping l'agente impara lo stesso: in training mangia 46-48 frutti e
+cresce fino a ~22. In valutazione greedy ci sono ancora cali a meta'
+training (ep. 100-120: 15-22 frutti, 13-14 partite bloccate), poi da ep. 130
+(SARSA) / 150 (Q-learning) i checkpoint sono stabili a 40-46 frutti con 0-3
+partite bloccate. Lettura: con il learning rate a coseno lo shaping sulla
+distanza non e' necessario in FO; il suo effetto sui loop (E8) era in gran
+parte compensazione dell'instabilita' poi risolta da E13.
+
+RISULTATI PARTIALLY OBSERVABLE (risultati_no_shaping_lr_decay_po_200ep)
+                              SARSA     Q-learning
+  training ultimi 50: frutti   42.1       41.9
+                      auto-coll. 1.62      1.59
+                      segm. persi 19.8      19.9
+                      lunghezza   18.5       18.0
+  eval ckpt >= 100:   media     39.7       32.3
+                      std        4.8       12.5
+                      rotti (<10) 0/11      1/11 (ep. 140: 2.1 frutti)
+                      bloccate    1.5        5.1
+  eval ckpt >= 150:   media     41.5       40.3
+                      bloccate    0.3        0.7
+
+CONFRONTO CON SHAPING (entrambi con coseno), eval frutti / bloccate
+                    ckpt >= 100                ckpt >= 150
+                    con        senza           con        senza
+  SARSA FO       34.5/5.3   37.7/4.1        39.1/2.8   43.2/1.2
+  Q-learning FO  41.9/1.3   38.5/3.0        42.6/0.7   42.4/1.3
+  SARSA PO       39.2/1.4   39.7/1.5        40.8/0.5   41.5/0.3
+  Q-learning PO  37.6/2.5   32.3/5.1        41.0/0.8   40.3/0.7
+
+CONCLUSIONE
+Con il learning rate a coseno lo shaping sulla distanza non serve, ne' in FO
+ne' in PO: a fine training (ckpt >= 150) le 8 configurazioni stanno tutte fra
+39 e 43 frutti con meno di 3 partite bloccate su 20. Le differenze a ckpt >=
+100 dipendono da singoli checkpoint crollati (SARSA FO con shaping ep. 100,
+Q-learning PO senza shaping ep. 140): rumore di un seed. Il loop risolto da
+E8 era in gran parte instabilita', poi risolta da E13. Senza shaping in PO il
+reward non contiene piu' informazione sulla posizione del frutto: il
+confronto FO vs PO e' piu' pulito.

@@ -29,7 +29,7 @@ import environments_partially_observable_2 as env_partial
 #            osserva (stato e input dell'euristica di esplorazione).
 #            Nota: lo shaping sulla distanza usa la posizione reale del frutto
 #            (il reward e' dell'ambiente), anche quando il frutto non e' visibile.
-OSSERVABILITA = "fully"   # "fully" | "partial"
+OSSERVABILITA = "partial"   # "fully" | "partial"
 MASK_SIZE = 2             # finestra 5x5
 
 
@@ -209,7 +209,7 @@ DISTANCE_SHAPING_COEF = 0.02
 # circa -0.6 se ripetuto per sempre: piu' di -0.2 ma meno di una collisione (-1).
 # A differenza di E8 NON e' basata su potenziale: cambia la policy ottima e
 # dipende da una memoria che la rete non vede tutta (solo il corpo).
-SHAPING = "distanza"        # "distanza" (E8) | "rivisita" (E12)
+SHAPING = "nessuno"         # "distanza" (E8) | "rivisita" (E12) | "nessuno" (E14)
 REVISIT_WINDOW = 20
 REVISIT_PENALTY = -0.02
 
@@ -650,6 +650,8 @@ def sarsa_train(env, q_network, optimizer, n_episodes=200, max_steps=500,
             ep_revisits += (revisit < 0)
             if SHAPING == "rivisita":
                 shaping = revisit                                   # E12
+            elif SHAPING == "nessuno":
+                shaping = np.zeros_like(rewards_np)                 # E14
             else:
                 shaping = gamma * distance_potential(env) - potential_before   # E8
             ep_shaping += shaping
@@ -848,7 +850,13 @@ if __name__ == "__main__":
     #   risultati_lr_decay_200ep   -> configurazione finale + learning rate a
     #                                 coseno da 1e-3 a 1e-4 (E13); partially
     #                                 observable: risultati_lr_decay_po_200ep
-    if SHAPING == "rivisita":
+    #   risultati_no_shaping_lr_decay_200ep -> come lr_decay ma senza shaping
+    #                                 (SHAPING="nessuno") (E14); partially
+    #                                 observable: risultati_no_shaping_lr_decay_po_200ep
+    if SHAPING == "nessuno":
+        OUTPUT_DIR = ("risultati_no_shaping_lr_decay_200ep" if OSSERVABILITA == "fully"
+                      else "risultati_no_shaping_lr_decay_po_200ep")
+    elif SHAPING == "rivisita":
         OUTPUT_DIR = "risultati_rivisita" if OSSERVABILITA == "fully" else "risultati_rivisita_po"
     elif LR_DECAY:
         OUTPUT_DIR = "risultati_lr_decay_200ep" if OSSERVABILITA == "fully" else "risultati_lr_decay_po_200ep"
