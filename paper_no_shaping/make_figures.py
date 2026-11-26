@@ -37,19 +37,12 @@ RUNS_2X2 = {
     "SARSA, PO": ("sarsa_4/risultati_no_shaping_lr_decay_po_200ep", "sarsa", BLUE, "--"),
     "Q-learning, PO": ("q_learning_2/risultati_no_shaping_lr_decay_po_200ep", "qlearning", ORANGE, "--"),
 }
-# esperimento E13 (con shaping): learning rate a coseno, usato nella figura fisso vs coseno
-RUNS_LR_COSINE = {
-    "SARSA, FO": "sarsa_4/risultati_lr_decay_200ep",
-    "Q-learning, FO": "q_learning_2/risultati_lr_decay_200ep",
-    "SARSA, PO": "sarsa_4/risultati_lr_decay_po_200ep",
-    "Q-learning, PO": "q_learning_2/risultati_lr_decay_po_200ep",
-}
-# stessi run con learning rate fisso 1e-3 (prima di E13, con shaping)
+# stessi run senza shaping con learning rate fisso 1e-3 (E14), per la figura fisso vs coseno
 RUNS_FIXED_LR = {
-    "SARSA, FO": "sarsa_4/risultati_finale_200ep",
-    "Q-learning, FO": "q_learning_2/risultati_finale_200ep",
-    "SARSA, PO": "sarsa_4/risultati_po_200ep",
-    "Q-learning, PO": "q_learning_2/risultati_po_200ep",
+    "SARSA, FO": "sarsa_4/risultati_no_shaping_fixed_lr_200ep",
+    "Q-learning, FO": "q_learning_2/risultati_no_shaping_fixed_lr_200ep",
+    "SARSA, PO": "sarsa_4/risultati_no_shaping_fixed_lr_po_200ep",
+    "Q-learning, PO": "q_learning_2/risultati_no_shaping_fixed_lr_po_200ep",
 }
 GREY = "#9a9a9a"
 RUNS_ORIG = {
@@ -174,9 +167,9 @@ def fig_lr_fixed_vs_cosine():
     contro coseno (colore), un pannello per cella del 2x2. Mostra le
     oscillazioni fra checkpoint che il coseno elimina (E9, E13)."""
     fig, axes = plt.subplots(2, 2, figsize=(3.3, 2.9), sharex=True, sharey=True)
-    for ax, (n, (_, a, c, _)) in zip(axes.flat, RUNS_2X2.items()):
+    for ax, (n, (p, a, c, _)) in zip(axes.flat, RUNS_2X2.items()):
         fixed = load(os.path.join(RUNS_FIXED_LR[n], f"eval_history_{a}.csv"))
-        cos = load(os.path.join(RUNS_LR_COSINE[n], f"eval_history_{a}.csv"))
+        cos = load(os.path.join(p, f"eval_history_{a}.csv"))
         ax.plot(fixed["episodio"], fixed["frutti"], color=GREY, lw=1.0, marker="o", ms=2,
                 label="fixed LR")
         ax.plot(cos["episodio"], cos["frutti"], color=c, lw=1.2, marker="o", ms=2,

@@ -36,8 +36,8 @@ By the end of the training, our first implementation ate about 72 fruits per epi
 We therefore shifted the goal of the project to eating as many fruits as possible \emph{while avoiding self-collisions} as much as possible, and redesigned the reward, the allowed moves and the training loop accordingly.
 Compared with the first implementation, self-collisions drop by about 70\% and lost segments by about 75\%, at the cost of about 35\% fewer fruits.
 We then compare the two algorithms under full and partial ($5\times5$ window) observability.
-With a fixed learning rate the greedy policy is unstable, especially with the window, where it often gets stuck in loops; a cosine learning-rate decay removes most of this instability, and makes the reward shaping toward the fruit that we had added against the loops unnecessary.
-With the final agents, which use no shaping, all four configurations reach about 40 fruits per game in greedy evaluation by the end of training, and the main remaining difference is in training: with the full board Q-learning takes more risk than SARSA.
+With a fixed learning rate the greedy policy is unstable and often gets stuck in loops; a cosine learning-rate decay removes most of this instability.
+With the final agents all four configurations reach about 40 fruits per game in greedy evaluation by the end of training, and the main remaining difference is in training: with the full board Q-learning takes more risk than SARSA.
 \end{abstract}
 
 % ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ Our contributions are:
 \begin{itemize}
 \item a diagnosis of reward hacking in the provided reward and a corrected collision penalty that makes self-collisions strictly unprofitable (Section~\ref{sec:hacking});
 \item a set of minimal changes (action masks, step cost, per-episode reset) that turn a degenerate policy into one that grows the snake (Sections~\ref{sec:collapse}--\ref{sec:reset});
-\item evidence that the instability of the greedy policy between checkpoints comes from the fixed learning rate, that a cosine decay removes most of it, and that with the decay a potential-based shaping toward the fruit is no longer needed (Sections~\ref{sec:shaping}--\ref{sec:noshaping});
+\item evidence that the instability of the greedy policy between checkpoints comes from the fixed learning rate, and that a cosine decay removes most of it (Section~\ref{sec:lr});
 \item a controlled $2\times2$ comparison (algorithm $\times$ observability) in which the two scripts differ \emph{only} in the TD target and the two environments differ \emph{only} in the observation (Section~\ref{sec:results}).
 \end{itemize}
 
@@ -91,7 +91,7 @@ The two environment files are identical except for this observation: with the sa
 We chose $m=2$ because it always contains the cells the agent can reach in two moves, so immediate dangers are visible, while the fruit is usually not.
 
 \subsection{Original implementation}
-Our first implementation, which we call the \emph{original} agents, used the environment reward as given (Table~\ref{tab:reward}), no action masks (reversals and wall hits allowed), games that continued across episodes, and no shaping. Its two scripts also used different $\varepsilon$ schedules (SARSA $0.2\to0.02$, Q-learning constant $0.15$). Network, heuristic, 32 boards and 200 episodes of 500 steps are the same as in the modified agents. Section~\ref{sec:design} motivates every change, and Section~\ref{sec:results} measures the result.
+Our first implementation, which we call the \emph{original} agents, used the environment reward as given (Table~\ref{tab:reward}), no action masks (reversals and wall hits allowed), games that continued across episodes, and a fixed learning rate. Its two scripts also used different $\varepsilon$ schedules (SARSA $0.2\to0.02$, Q-learning constant $0.15$). Network, heuristic, 32 boards and 200 episodes of 500 steps are the same as in the modified agents. Section~\ref{sec:design} motivates every change, and Section~\ref{sec:results} measures the result.
 
 \subsection{Network and exploration}
 Both algorithms share the same Q-network: two $3\times3$ convolutions (32 and 64 filters, \emph{same} padding), a dense layer of 128 units and a linear output with 4 Q-values.
@@ -141,10 +141,10 @@ The training loop is summarised in Algorithm~\ref{alg:train}.
 \section{Design decisions}
 \label{sec:design}
 
-Table~\ref{tab:reward} summarises the final reward. Each subsection explains one change through the failure that motivated it, in the order in which we made them. Sections~\ref{sec:hacking}--\ref{sec:shaping} were tested with SARSA in FO on short 60-episode runs, and their numbers come from those runs; the learning-rate decay (Section~\ref{sec:lr}) and the removal of the shaping (Section~\ref{sec:noshaping}) were tested on all four configurations with 200 episodes.
+Table~\ref{tab:reward} summarises the final reward. Each subsection explains one change through the failure that motivated it, in the order in which we made them. Sections~\ref{sec:hacking}--\ref{sec:reset} were tested with SARSA in FO on short 60-episode runs, and their numbers come from those runs; the learning-rate decay (Section~\ref{sec:lr}) was tested on all four configurations with 200 episodes.
 
 \begin{table}[t]
-\caption{Reward per step. $k$ = segments lost in a self-collision. The final agents use no shaping (Section~\ref{sec:noshaping}).}
+\caption{Reward per step. $k$ = segments lost in a self-collision.}
 \label{tab:reward}
 \vskip 0.1in
 \begin{center}
@@ -210,46 +210,39 @@ A separate greedy evaluation ($\varepsilon=0$, 20 new games of 500 steps, fixed 
 Resetting the boards at every episode keeps the start of the game in the training data. Greedy evaluation went from 9 to 23 fruits at episode 59 of the same configuration, and the per-episode return became comparable across episodes.
 Because averages hide bimodal outcomes, the evaluation also counts \emph{stuck} games: games with no fruit in the last 100 steps, typically a loop.
 
-\subsection{Potential-based shaping toward the fruit (later removed)}
-\label{sec:shaping}
-The greedy policy still entered long cycles (period 12--20) after a few fruits, while in training it ate steadily.
-In training a few heuristic moves per game (at $\varepsilon\approx0.02$, about 10) are enough to break a cycle, so the network can leave ``go to the fruit'' to the exploration.
-For SARSA this is structural, since \eqref{eq:sarsa} values the policy \emph{with} its exploration.
-We add
-\begin{equation}
-F(s,s') = \gamma\Phi(s')-\Phi(s), \qquad \Phi(s) = C\,(D_{\max}-d(s)),
-\label{eq:shaping}
-\end{equation}
-with $C=0.02$, $D_{\max}=14$ the largest distance on the board, and $d(s)$ the Manhattan distance between head and fruit.
-$F$ leaves the optimal policy unchanged \cite{ng1999}, and $\Phi\ge0$ is deliberate: along a cycle returning to the same state the shaping sums to $(\gamma-1)\sum\Phi\le0$, so going around in circles costs.
-Training metrics did not change, but the mean greedy evaluation over checkpoints 10--59 went from 13.5 to 23.9 fruits.
-In PO, $\Phi$ uses the true fruit position even when the fruit is not visible, so the reward carries indirect information about where the fruit is. Section~\ref{sec:noshaping} shows that, once the learning rate decays, the shaping can be removed.
-
 \subsection{Instability: learning-rate decay}
 \label{sec:lr}
-With all the previous changes (shaping included) and a fixed learning rate of $10^{-3}$, the 200-episode runs still alternated good and broken checkpoints a few episodes apart, up to the end of training (grey lines in Figure~\ref{fig:lr}), while the training curves stayed smooth.
-Across the checkpoints from episode 100 on, greedy fruits had a standard deviation of about 10, and in PO 4 of 11 checkpoints ate fewer than 10 fruits, with most games stuck (Table~\ref{tab:lr}).
+After the reset, the greedy policy still entered long cycles (period 12--20) after a few fruits, while in training it ate steadily.
+In training a few heuristic moves per game (at $\varepsilon\approx0.02$, about 10) are enough to break a cycle, so the loops only appear when the agent acts greedily.
+In the 200-episode runs with a fixed learning rate of $10^{-3}$, the greedy policy also alternated good and broken checkpoints a few episodes apart, up to the end of training (grey lines in Figure~\ref{fig:lr}), while the training curves stayed smooth.
+Across the checkpoints from episode 100 on, greedy fruits had a standard deviation of 9--15, and 12 of the 44 checkpoints of the four configurations ate fewer than 10 fruits, with most games stuck (Table~\ref{tab:lr}).
+The problem is worst in PO, where 6 of 11 Q-learning checkpoints are broken.
 Updates are online on correlated transitions, and with a constant step size even late updates can flip the $\arg\max$ in many states at once.
 We therefore let the learning rate decay from $10^{-3}$ to $10^{-4}$ along a cosine over the $10^5$ updates of training: early learning is almost unchanged, while late updates are small.
-From episode 110 on, no checkpoint is broken in any configuration (Figure~\ref{fig:lr}), and stuck games drop from 7--13 to 1--5 of 20 (Table~\ref{tab:lr}).
-The only broken checkpoint left is SARSA FO at episode 100, when the learning rate is still about $5\cdot10^{-4}$.
-The effect is largest in PO, where greedy fruits more than double.
+With the decay only one checkpoint out of 44 is broken (Q-learning PO at episode 140), and from episode 150 on every configuration eats 40--43 fruits per game with a standard deviation below 3 and at most 1.3 stuck games of 20, against 18--31 fruits and 7--12 stuck games with the fixed rate (Table~\ref{tab:lr}, Figure~\ref{fig:lr}).
+The effect is largest in PO, where greedy fruits roughly double, and training also improves slightly (2--3 more fruits per episode).
 
 \begin{table}[t]
-\caption{Greedy evaluation with a fixed vs decaying learning rate (both with shaping), over the checkpoints from episode 100 on (11 checkpoints, 20 games each). Std = standard deviation across checkpoints; broken = checkpoints with fewer than 10 fruits.}
+\caption{Greedy evaluation with a fixed vs cosine learning rate (20 games per checkpoint). Broken = checkpoints with fewer than 10 fruits; stuck = games with no fruit in the last 100 steps (of 20); std = standard deviation of fruits across checkpoints.}
 \label{tab:lr}
 \vskip 0.1in
 \begin{center}
 \begin{small}
 \setlength{\tabcolsep}{3pt}
-\begin{tabular}{lcccc}
+\begin{tabular}{llccccc}
 \toprule
- & Fruit & Std & Broken & Stuck \\
+ & & \multicolumn{3}{c}{Checkpoints $\ge100$} & \multicolumn{2}{c}{$\ge150$} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-7}
+ & LR & Fruit & Broken & Stuck & Fruit & Std \\
 \midrule
-SARSA, FO    & 29.7 $\to$ 34.5 & 10.1 $\to$ 10.4 & 1 $\to$ 1 & 7.0 $\to$ 5.3 \\
-Q-learn., FO & 27.2 $\to$ 41.9 & 10.1 $\to$ 4.6  & 1 $\to$ 0 & 8.4 $\to$ 1.3 \\
-SARSA, PO    & 17.5 $\to$ 39.2 & 11.2 $\to$ 3.3  & 4 $\to$ 0 & 13.1 $\to$ 1.4 \\
-Q-learn., PO & 16.1 $\to$ 37.6 & 12.2 $\to$ 7.1  & 4 $\to$ 0 & 13.4 $\to$ 2.5 \\
+SARSA, FO    & fixed  & 29.1 & 0/11 & 7.8  & 30.6 & 10.0 \\
+             & cosine & 37.7 & 0/11 & 4.1  & 43.2 & 0.6 \\
+Q-learn., FO & fixed  & 21.8 & 3/11 & 10.5 & 26.6 & 13.0 \\
+             & cosine & 38.5 & 0/11 & 3.0  & 42.4 & 2.7 \\
+SARSA, PO    & fixed  & 23.4 & 3/11 & 9.6  & 24.5 & 13.4 \\
+             & cosine & 39.7 & 0/11 & 1.5  & 41.5 & 0.7 \\
+Q-learn., PO & fixed  & 14.4 & 6/11 & 14.1 & 17.5 & 14.8 \\
+             & cosine & 32.3 & 1/11 & 5.1  & 40.3 & 1.2 \\
 \bottomrule
 \end{tabular}
 \end{small}
@@ -260,50 +253,17 @@ Q-learn., PO & 16.1 $\to$ 37.6 & 12.2 $\to$ 7.1  & 4 $\to$ 0 & 13.4 $\to$ 2.5 \\
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/lr_fixed_vs_cosine.pdf}}
-\caption{Greedy evaluation (fruits per game, 20 games) at every checkpoint, with a fixed learning rate (grey) and a cosine decay (colour), one panel per configuration, both with shaping. With the decay the policy stops oscillating in the second half of training.}
+\caption{Greedy evaluation (fruits per game, 20 games) at every checkpoint, with a fixed learning rate (grey) and a cosine decay (colour), one panel per configuration. With the decay the policy stops oscillating as the learning rate becomes small (from about episode 150); with the fixed rate it keeps oscillating until the end.}
 \label{fig:lr}
 \end{center}
 \vskip -0.3in
 \end{figure}
 
-\subsection{Removing the shaping}
-\label{sec:noshaping}
-The shaping of Section~\ref{sec:shaping} was added to fight greedy loops that, as Section~\ref{sec:lr} shows, came mainly from unstable updates.
-We therefore repeated the four decaying-rate runs without shaping (Table~\ref{tab:noshaping}).
-By the end of training (checkpoints $\ge150$) the results with and without shaping are the same within the noise of one seed: 39--43 fruits and at most 3 stuck games of 20 in every configuration.
-Over checkpoints $\ge100$ the differences come from single broken checkpoints, in either direction (SARSA FO with shaping at episode 100, Q-learning PO without shaping at episode 140).
-Without shaping the agents eat slightly more in training (46--48 vs 44--45 fruits in FO).
-We drop the shaping from the final agents: it is not needed, and without it the PO reward no longer carries information about the hidden fruit, which makes the FO vs PO comparison cleaner.
-
-\begin{table}[t]
-\caption{Greedy evaluation with cosine learning-rate decay, with vs without shaping: fruits / stuck games (of 20), mean over the checkpoints from episode 100 and from episode 150 on.}
-\label{tab:noshaping}
-\vskip 0.1in
-\begin{center}
-\begin{small}
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{lcccc}
-\toprule
- & \multicolumn{2}{c}{Checkpoints $\ge100$} & \multicolumn{2}{c}{Checkpoints $\ge150$} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}
- & Shaping & None & Shaping & None \\
-\midrule
-SARSA, FO    & 34.5 / 5.3 & 37.7 / 4.1 & 39.1 / 2.8 & 43.2 / 1.2 \\
-Q-learn., FO & 41.9 / 1.3 & 38.5 / 3.0 & 42.6 / 0.7 & 42.4 / 1.3 \\
-SARSA, PO    & 39.2 / 1.4 & 39.7 / 1.5 & 40.8 / 0.5 & 41.5 / 0.3 \\
-Q-learn., PO & 37.6 / 2.5 & 32.3 / 5.1 & 41.0 / 0.8 & 40.3 / 0.7 \\
-\bottomrule
-\end{tabular}
-\end{small}
-\end{center}
-\vskip -0.15in
-\end{table}
-
 % ---------------------------------------------------------------------------
 \section{Results}
 \label{sec:results}
 
-All runs use the final configuration (learning-rate decay, no shaping), 200 episodes and one seed. Training metrics are averaged over the last 50 episodes. Greedy metrics are averaged over the checkpoints from episode 100 on.
+All runs use the final configuration (learning-rate decay included), 200 episodes and one seed. Training metrics are averaged over the last 50 episodes. Greedy metrics are averaged over the checkpoints from episode 100 on.
 
 \begin{figure*}[t]
 \begin{center}
@@ -377,7 +337,7 @@ In greedy evaluation the two are equivalent (37.7 vs 38.5 fruits).
 \textbf{Observability.} During training PO costs little: about 10\% fewer fruits (42 vs 46--48) and a shorter snake (18 vs 22--23). PO collisions are lower partly \emph{because} the snake is shorter.
 In greedy evaluation there is no clear gap: SARSA PO averages 39.7 fruits, and Q-learning PO 32.3 only because of one broken checkpoint (episode 140, 2 fruits); from episode 150 on all four configurations eat 40--43 fruits with at most 1.3 stuck games of 20.
 With a $5\times5$ window, many different states produce the same observation whenever the fruit is out of view (perceptual aliasing \cite{kaelbling1998}), and a deterministic memoryless policy can then repeat the same cycle forever \cite{singh1994}.
-With a fixed learning rate we attributed the many stuck PO games to this effect, but the decay removes most of them (Table~\ref{tab:lr}), and the PO agents do as well without any information about the fruit in the reward (Table~\ref{tab:noshaping}): in our setting the loops came mainly from unstable updates.
+The decay, however, removes most stuck games also in PO (Table~\ref{tab:lr}), although the reward carries no information about the hidden fruit: in our setting the loops came mainly from unstable updates.
 One caveat remains: the board is small, so the fruit is often within a few moves of the window.
 Under PO the two algorithms are indistinguishable.
 
@@ -405,7 +365,6 @@ Under PO the two algorithms are indistinguishable.
 \item There is one seed per configuration, so the small SARSA vs Q-learning differences are suggestive, not conclusive.
 \item The original runs undercount collisions and use different $\varepsilon$ schedules.
 \item We tried a single learning-rate schedule ($10^{-3}\to10^{-4}$, cosine), with no comparison to other schedules.
-\item The fixed-rate runs of Section~\ref{sec:lr} used the shaping, so we did not test a fixed learning rate without shaping.
 \end{itemize}
 Natural next steps are several seeds with confidence intervals, a larger board where the window hides more, and giving the PO agent memory (frame stacking or a recurrent network \cite{hausknecht2015}).
 
@@ -415,7 +374,7 @@ Natural next steps are several seeds with confidence intervals, a larger board w
 
 The provided reward taught both algorithms to eat and bite. Making self-collisions strictly unprofitable, masking moves the game forbids, resetting games and decaying the learning rate produced agents that eat about 35\% fewer fruits but bite about 70\% less and keep their length.
 SARSA is the more cautious learner under full observability, as theory predicts.
-The instability of the greedy policy, which we first attributed to partial observability and fought with reward shaping, came mainly from the fixed learning rate: with a cosine decay the shaping is unnecessary, all four configurations reach about 40 fruits per game, and a $5\times5$ window costs little on a $10\times10$ board even when the reward says nothing about where the fruit is.
+The instability of the greedy policy came mainly from the fixed learning rate: with a cosine decay all four configurations reach about 40 fruits per game, and a $5\times5$ window costs little on a $10\times10$ board even though the reward says nothing about where the fruit is.
 
 \bibliography{main}
 \bibliographystyle{icml2021}

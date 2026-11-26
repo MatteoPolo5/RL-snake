@@ -1019,3 +1019,20 @@ Q-learning PO senza shaping ep. 140): rumore di un seed. Il loop risolto da
 E8 era in gran parte instabilita', poi risolta da E13. Senza shaping in PO il
 reward non contiene piu' informazione sulla posizione del frutto: il
 confronto FO vs PO e' piu' pulito.
+
+RUN DI CONTROLLO: NESSUNO SHAPING + LEARNING RATE FISSO 1e-3
+(risultati_no_shaping_fixed_lr_200ep / _po_200ep), per il paper senza shaping
+                     ckpt >= 100                       ckpt >= 150
+                     frutti  rotti  bloccate           frutti  std
+  SARSA FO     fisso  29.1   0/11    7.8               30.6   10.0
+               coseno 37.7   0/11    4.1               43.2    0.6
+  Q-learn. FO  fisso  21.8   3/11   10.5               26.6   13.0
+               coseno 38.5   0/11    3.0               42.4    2.7
+  SARSA PO     fisso  23.4   3/11    9.6               24.5   13.4
+               coseno 39.7   0/11    1.5               41.5    0.7
+  Q-learn. PO  fisso  14.4   6/11   14.1               17.5   14.8
+               coseno 32.3   1/11    5.1               40.3    1.2
+Anche senza shaping il learning rate fisso produce checkpoint instabili fino
+alla fine (12 rotti su 44); il coseno li riduce a 1 su 44. Il risultato di E13
+vale quindi con e senza shaping.
+

@@ -29,7 +29,7 @@ import environments_partially_observable_2 as env_partial
 #            osserva (stato e input dell'euristica di esplorazione).
 #            Nota: lo shaping sulla distanza usa la posizione reale del frutto
 #            (il reward e' dell'ambiente), anche quando il frutto non e' visibile.
-OSSERVABILITA = "partial"   # "fully" | "partial"
+OSSERVABILITA = "fully"   # "fully" | "partial"
 MASK_SIZE = 2             # finestra 5x5
 
 
@@ -219,7 +219,7 @@ REVISIT_PENALTY = -0.02
 # All'inizio resta vicino a LR_INITIAL (si impara veloce come prima), verso la
 # fine i passi sono ~10 volte piu' piccoli e la policy greedy cambia meno fra
 # un checkpoint e l'altro. Con LR_DECAY = False il learning rate e' fisso.
-LR_DECAY = True
+LR_DECAY = False
 LR_INITIAL = 1e-3
 LR_FINAL = 1e-4
 
@@ -853,9 +853,13 @@ if __name__ == "__main__":
     #   risultati_no_shaping_lr_decay_200ep -> come lr_decay ma senza shaping
     #                                 (SHAPING="nessuno") (E14); partially
     #                                 observable: risultati_no_shaping_lr_decay_po_200ep
+    #   risultati_no_shaping_fixed_lr_200ep -> senza shaping e learning rate
+    #                                 fisso 1e-3 (LR_DECAY=False) (E14); partially
+    #                                 observable: risultati_no_shaping_fixed_lr_po_200ep
     if SHAPING == "nessuno":
-        OUTPUT_DIR = ("risultati_no_shaping_lr_decay_200ep" if OSSERVABILITA == "fully"
-                      else "risultati_no_shaping_lr_decay_po_200ep")
+        lr_tag = "lr_decay" if LR_DECAY else "fixed_lr"
+        OUTPUT_DIR = (f"risultati_no_shaping_{lr_tag}_200ep" if OSSERVABILITA == "fully"
+                      else f"risultati_no_shaping_{lr_tag}_po_200ep")
     elif SHAPING == "rivisita":
         OUTPUT_DIR = "risultati_rivisita" if OSSERVABILITA == "fully" else "risultati_rivisita_po"
     elif LR_DECAY:
