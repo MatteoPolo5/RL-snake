@@ -1036,3 +1036,43 @@ Anche senza shaping il learning rate fisso produce checkpoint instabili fino
 alla fine (12 rotti su 44); il coseno li riduce a 1 su 44. Il risultato di E13
 vale quindi con e senza shaping.
 
+
+-------------------------------------------------------------------------------
+E15. BASELINE EURISTICA (richiesta dalle specifiche del progetto)
+-------------------------------------------------------------------------------
+Data: 2026-11-27
+Categoria:           baseline / valutazione
+Stato:               ESEGUITO
+
+MOTIVAZIONE
+Le specifiche chiedono una baseline senza apprendimento, valutata
+sull'ambiente, descritta in modo completo nel report e mostrata come linea
+orizzontale nei grafici di apprendimento. Finora l'euristica era usata solo
+come politica di esplorazione.
+
+IMPLEMENTAZIONE
+baseline.py (cartella principale): l'euristica degli script di training gioca
+da sola, stesso protocollo della valutazione greedy degli agenti (20 partite
+nuove, 500 passi, seed 12345, stesse metriche), in FO e PO. Ambienti di
+sarsa_4/. Risultati in baseline/baseline_risultati.csv. Tempo: ~5 s.
+
+RISULTATI (20 partite, seed 12345; con 100 partite e seed 0 cambia di < 5%)
+                       baseline FO   agenti FO*      baseline PO   agenti PO*
+  frutti                 71.8         42.4-43.2        27.6         40.3-41.5
+  auto-collisioni         5.90         1.25-1.67        4.05         1.23-1.45
+  segmenti persi         56.0          9.1-12.3        20.2         13.7-17.9
+  lunghezza max          26.8         34.9-37.6        14.2         33.5-33.9
+  partite bloccate        0/20         1.2-1.3          0/20         0.3-0.7
+  * valutazione greedy, checkpoint >= 150, run finali (coseno, senza shaping)
+
+LETTURA
+- FO: la baseline mangia di piu' (72 contro 42-43) ma si morde ~4 volte piu'
+  spesso e perde ~5 volte piu' segmenti: e' lo stesso comportamento "mangia
+  e morditi" degli agenti originali (72 frutti, 6 auto-collisioni). Guarda un
+  solo passo avanti, quindi da lunga si chiude nei vicoli. Gli agenti RL
+  mangiano meno ma tengono il serpente molto piu' lungo.
+- PO: gli agenti battono la baseline su tutte le misure (frutti +50%,
+  auto-collisioni -65%, segmenti persi -10/-30%, serpente piu' del doppio
+  piu' lungo): senza vedere il frutto la baseline cammina a caso.
+- Rispetto all'obiettivo del progetto (frutti + poche auto-collisioni) gli
+  agenti sono migliori in PO e offrono un compromesso diverso in FO.
