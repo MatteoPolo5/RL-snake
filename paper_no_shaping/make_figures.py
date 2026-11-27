@@ -45,6 +45,20 @@ RUNS_FIXED_LR = {
     "Q-learning, PO": "q_learning_2/risultati_no_shaping_fixed_lr_po_200ep",
 }
 GREY = "#9a9a9a"
+# baseline euristica (E15): baseline.py, stesso protocollo della valutazione greedy
+BASELINE_CSV = "baseline/baseline_risultati.csv"
+BASE_COLOR = "#333333"
+BASE_STYLE = {"fully": ("-", "Baseline, FO"), "partial": ("--", "Baseline, PO")}
+# metrica del training / della valutazione -> colonna del CSV della baseline
+BASE_KEY = {"frutti_mangiati": "frutti", "lunghezza_media": "lunghezza_media",
+            "self_collision": "self_collision", "segmenti_persi": "segmenti_persi",
+            "frutti": "frutti", "partite_bloccate": "partite_bloccate"}
+
+
+def load_baseline():
+    with open(os.path.join(ROOT, BASELINE_CSV)) as f:
+        return {r["osservabilita"]: {k: float(v) for k, v in r.items() if k != "osservabilita"}
+                for r in csv.DictReader(f)}
 RUNS_ORIG = {
     "SARSA\noriginal": ("sarsa_4/training_history_sarsa.csv", BLUE, True),
     "Q-learning\noriginal": ("q_learning_2/training_history_qlearning.csv", ORANGE, True),
@@ -102,8 +116,11 @@ def fig_orig_vs_mod():
 
 def _training_panels(metrics, fname):
     data = {n: load(os.path.join(p, f"training_history_{a}.csv")) for n, (p, a, _, _) in RUNS_2X2.items()}
-    fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.5), sharex=True)
+    base = load_baseline()
+    fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.7), sharex=True)
     for ax, (k, yl) in zip(axes, metrics):
+        for obs, (ls, lab) in BASE_STYLE.items():   # baseline: linea orizzontale
+            ax.axhline(base[obs][BASE_KEY[k]], color=BASE_COLOR, ls=ls, lw=1.0, label=lab)
         for n, (_, _, c, ls) in RUNS_2X2.items():
             d = data[n]
             ax.plot(d["episodio"], d[k], color=c, lw=0.5, alpha=0.15)
@@ -113,9 +130,9 @@ def _training_panels(metrics, fname):
         ax.set_ylim(bottom=0)
         clean(ax)
     axes[-1].set_xlabel("Training episode")
-    fig.legend(*axes[0].get_legend_handles_labels(), frameon=False, ncol=4, loc="upper center",
+    fig.legend(*axes[0].get_legend_handles_labels(), frameon=False, ncol=3, loc="upper center",
                handlelength=2.0, columnspacing=0.8, fontsize=6.3)
-    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.94))
+    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.905))
     fig.savefig(os.path.join(OUT, fname))
     plt.close(fig)
 
@@ -136,9 +153,18 @@ def fig_eval_2x2():
     ev = {n: load(os.path.join(p, f"eval_history_{a}.csv")) for n, (p, a, _, _) in RUNS_2X2.items()}
     labels = [n.replace(", ", "\n") for n in names]
     rng = np.random.default_rng(0)
+    base = load_baseline()
     fig, axes = plt.subplots(2, 1, figsize=(3.3, 3.4), sharex=True)
     for ax, (k, yl) in zip(axes, [("frutti", "Greedy: fruits / game"),
                                    ("partite_bloccate", "Greedy: stuck games (of 20)")]):
+        # baseline: linea orizzontale sopra le colonne FO (0-1) e PO (2-3).
+        # Le partite bloccate della baseline sono 0 in FO e PO: lo dice la didascalia.
+        if k == "frutti":
+            for obs, x0 in (("fully", -0.45), ("partial", 1.55)):
+                b = base[obs][BASE_KEY[k]]
+                ax.plot([x0, x0 + 1.9], [b, b], color=BASE_COLOR, ls=BASE_STYLE[obs][0], lw=1.0, zorder=2)
+                ax.text(x0, b + 1.0, f"baseline {b:.1f}", ha="left", va="bottom",
+                        fontsize=6.2, color=BASE_COLOR)
         for i, n in enumerate(names):
             _, _, c, ls = RUNS_2X2[n]
             e = ev[n]
