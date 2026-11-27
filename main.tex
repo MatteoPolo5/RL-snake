@@ -53,7 +53,7 @@ Our contributions are:
 \item a diagnosis of reward hacking in the provided reward and a corrected collision penalty that makes self-collisions strictly unprofitable (Section~\ref{sec:hacking});
 \item a set of minimal changes (action masks, step cost, per-episode reset) that turn a degenerate policy into one that grows the snake (Sections~\ref{sec:collapse}--\ref{sec:reset});
 \item evidence that the instability of the greedy policy between checkpoints comes from the fixed learning rate, and that a cosine decay removes most of it (Section~\ref{sec:lr});
-\item a controlled $2\times2$ comparison (algorithm $\times$ observability) in which the two scripts differ \emph{only} in the TD target and the two environments differ \emph{only} in the observation (Section~\ref{sec:results}).
+\item a controlled $2\times2$ comparison (algorithm $\times$ observability) in which the two scripts differ \emph{only} in the TD target and the two environments differ \emph{only} in the observation, with a rule-based baseline as reference (Section~\ref{sec:results}).
 \end{itemize}
 
 % ---------------------------------------------------------------------------
@@ -92,14 +92,27 @@ The board is one-hot encoded into four channels (empty, fruit, body, head); wall
 \subsection{Original implementation}
 Our first implementation, which we call the \emph{original} agents, used the environment reward as given (Table~\ref{tab:reward}), no action masks (reversals and wall hits allowed), games that continued across episodes, and a fixed learning rate. Its two scripts also used different $\varepsilon$ schedules (SARSA $0.2\to0.02$, Q-learning constant $0.15$). Network, heuristic, 32 boards and 200 episodes of 500 steps are the same as in the modified agents. Section~\ref{sec:design} motivates every change, and Section~\ref{sec:results} measures the result.
 
+\subsection{Heuristic baseline}
+\label{sec:baseline}
+As a reference without any learning we use a greedy rule-based policy. At every step it looks at the four cells next to the head and:
+\begin{enumerate}
+\item discards the reversal and the moves into a wall (if no move is left, it reverses);
+\item among the remaining moves, prefers those that do not enter the body (if all do, it keeps them all);
+\item among these, picks the one that minimises the Manhattan distance between head and fruit, breaking ties at random.
+\end{enumerate}
+In PO it sees only the $5\times5$ window: if the fruit is outside, it skips rule 3 and picks a random safe move.
+This is the natural ``go to the fruit without crashing'' strategy: it never hits a wall and never bites itself when a free cell is available, but it looks only one step ahead, so a long snake can enter a region closed by its own body.
+We evaluate it with the same protocol as the greedy evaluation of the agents (Section~\ref{sec:reset}): 20 new games of 500 steps with a fixed seed.
+The same rules also drive the exploration of the agents (Section~\ref{sec:netexp}), so the comparison asks whether the network learns more than the rule it explores with.
+
 \subsection{Network and exploration}
+\label{sec:netexp}
 Both algorithms share the same Q-network: two $3\times3$ convolutions (32 and 64 filters, \emph{same} padding), a dense layer of 128 units and a linear output with 4 Q-values.
 In PO only the input size changes.
 We train online with Adam, with a learning rate that decays from $10^{-3}$ to $10^{-4}$ along a cosine (Section~\ref{sec:lr}), MSE on the TD error, one gradient step per environment step on the 32 transitions, $\gamma=0.95$, for 200 episodes.
 
-Exploration is $\varepsilon$-greedy with $\varepsilon$ decaying linearly from $0.2$ to $0.02$, but the exploratory move is not uniform: it comes from a rule-based heuristic that never reverses, avoids walls and body, and moves toward the fruit (ties broken at random).
+Exploration is $\varepsilon$-greedy with $\varepsilon$ decaying linearly from $0.2$ to $0.02$, but the exploratory move is not uniform: it is the move of the baseline heuristic (Section~\ref{sec:baseline}), which in PO also sees only the window.
 Uniform exploration on a crowded board mostly produces collisions, which would drown the learning signal.
-In PO the heuristic only sees the $5\times5$ window: if the fruit is outside, it picks a random safe move.
 
 % ---------------------------------------------------------------------------
 \section{Algorithms}
@@ -285,7 +298,7 @@ The fruit gap is therefore not only a cost of caution. The effect on collisions 
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/training_growth.pdf}}
-\caption{Training: fruits per episode (top) and mean snake length (bottom), moving average over 10 episodes. Colour: algorithm; solid: fully observable (FO); dashed: partially observable (PO, $5\times5$ window).}
+\caption{Training: fruits per episode (top) and mean snake length (bottom), moving average over 10 episodes. Colour: algorithm; solid: fully observable (FO); dashed: partially observable (PO, $5\times5$ window). Black horizontal lines: heuristic baseline (Section~\ref{sec:baseline}).}
 \label{fig:growth}
 \end{center}
 \vskip -0.3in
@@ -294,14 +307,14 @@ The fruit gap is therefore not only a cost of caution. The effect on collisions 
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/training_safety.pdf}}
-\caption{Training: self-collisions (top) and segments lost (bottom) per episode, same encoding as Figure~\ref{fig:growth}. Both decrease steadily in the second half of training.}
+\caption{Training: self-collisions (top) and segments lost (bottom) per episode, same encoding as Figure~\ref{fig:growth}, black lines = baseline. Both decrease steadily in the second half of training.}
 \label{fig:safety}
 \end{center}
 \vskip -0.3in
 \end{figure}
 
 \begin{table}[t]
-\caption{$2\times2$ comparison. Training: mean of the last 50 episodes. Greedy: mean over checkpoints $\ge 100$ (20 games each); Bite = self-collisions, Lost = segments lost, Len.\ = mean snake length (per episode); stuck = games with no fruit in the last 100 steps.}
+\caption{$2\times2$ comparison. Training: mean of the last 50 episodes. Greedy: mean over checkpoints $\ge 100$ (20 games each); Bite = self-collisions, Lost = segments lost, Len.\ = mean snake length (per episode); stuck = games with no fruit in the last 100 steps. The baseline does not learn: its row is one evaluation (20 games of 500 steps), valid for both groups of columns.}
 \label{tab:2x2}
 \vskip 0.1in
 \begin{center}
@@ -317,6 +330,9 @@ SARSA, FO      & 45.9 & 1.77 & 13.7 & 22.9 & 37.7 & 4.1 \\
 Q-learn., FO   & 47.5 & 2.15 & 19.3 & 21.8 & 38.5 & 3.0 \\
 SARSA, PO      & 42.1 & 1.62 & 19.8 & 18.5 & 39.7 & 1.5 \\
 Q-learn., PO   & 41.9 & 1.59 & 19.9 & 18.0 & 32.3 & 5.1 \\
+\midrule
+Baseline, FO   & 71.8 & 5.90 & 56.0 & 14.0 & 71.8 & 0 \\
+Baseline, PO   & 27.6 & 4.05 & 20.2 & 6.4  & 27.6 & 0 \\
 \bottomrule
 \end{tabular}
 \end{small}
@@ -340,10 +356,19 @@ The decay removes most stuck games also in PO (Table~\ref{tab:lr}), although the
 One caveat remains: the board is small, so the fruit is often within a few moves of the window.
 Under PO the two algorithms are indistinguishable.
 
+\subsection{RL agents vs heuristic baseline}
+\label{sec:vsbaseline}
+\textbf{FO.} The baseline eats more fruits than the agents (71.8 vs 46--48 per episode in training, 38 in greedy evaluation), but bites itself about 3 times as often (5.90 vs 1.8--2.2) and loses 3--4 times as many segments (56.0 vs 14--19), so its snake stays short (mean length 14.0 vs 22--23; Table~\ref{tab:2x2}, Figures~\ref{fig:growth}--\ref{fig:safety}).
+It reproduces, without any learning, the ``eat, then bite'' behaviour of the original agents (Section~\ref{sec:hacking}): with one step of lookahead it walks straight to the fruit and, once long, into regions closed by its own body.
+The agents are therefore worse on goal (i) and much better on goal (ii), the trade-off we chose in Section~\ref{sec:intro}.
+\textbf{PO.} The agents beat the baseline on every metric: more fruits (42 vs 27.6 in training, 32--40 greedy), less than half the self-collisions, fewer lost segments in greedy evaluation and a snake almost three times as long. When the fruit is out of view the baseline moves at random, while the network has learned where to look for it, even though the reward carries no information about the hidden fruit.
+In both settings the agents learn more than the rule they explore with.
+Closing the fruit gap in FO would require looking further ahead than one step, for example a larger discount factor, longer training, or giving the agent the free space reachable from the head as an input.
+
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/eval_2x2.pdf}}
-\caption{Greedy evaluation ($\varepsilon=0$, 20 new games, fixed seed) of every checkpoint from episode 100 on: one dot per checkpoint, black line = mean. Top: fruits per game; bottom: stuck games. Filled: FO; hollow: PO. The outlier at about 2 fruits is the Q-learning PO checkpoint at episode 140.}
+\caption{Greedy evaluation ($\varepsilon=0$, 20 new games, fixed seed) of every checkpoint from episode 100 on: one dot per checkpoint, black line = mean. Top: fruits per game; bottom: stuck games. Filled: FO; hollow: PO. Black horizontal lines: baseline fruits (solid FO, dashed PO); the baseline has no stuck games. The outlier at about 2 fruits is the Q-learning PO checkpoint at episode 140.}
 \label{fig:eval}
 \end{center}
 \vskip -0.3in
