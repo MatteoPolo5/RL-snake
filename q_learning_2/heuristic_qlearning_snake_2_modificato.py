@@ -226,7 +226,8 @@ REVISIT_PENALTY = -0.02
 # All'inizio resta vicino a LR_INITIAL (si impara veloce come prima), verso la
 # fine i passi sono ~10 volte piu' piccoli e la policy greedy cambia meno fra
 # un checkpoint e l'altro. Con LR_DECAY = False il learning rate e' fisso.
-LR_DECAY = False
+LR_DECAY = True
+SEED = 0              # seed fisso (specifiche del progetto); None = nessun seed
 LR_INITIAL = 1e-3
 LR_FINAL = 1e-4
 
@@ -871,6 +872,12 @@ if __name__ == "__main__":
         OUTPUT_DIR = "risultati_lr_decay_200ep" if OSSERVABILITA == "fully" else "risultati_lr_decay_po_200ep"
     else:
         OUTPUT_DIR = "risultati_finale_200ep" if OSSERVABILITA == "fully" else "risultati_po_200ep"
+    #   <cartella>_seed0           -> stesso esperimento con seed 0 (SEED=0): i run
+    #                                 del paper sono senza seed; con seed 0 si
+    #                                 producono i pesi consegnati (E16)
+    if SEED is not None:
+        OUTPUT_DIR += f"_seed{SEED}"
+        tf.keras.utils.set_random_seed(SEED)   # seed di python, numpy e tensorflow
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     env = make_env(N_BOARDS, BOARD_SIZE)
@@ -886,6 +893,11 @@ if __name__ == "__main__":
 
     plot_training_history(history, path=os.path.join(OUTPUT_DIR, "training_history.png"))
     plot_eval_history(eval_history, path=os.path.join(OUTPUT_DIR, "eval_history.png"))
+
+    # pesi dell'agente addestrato (caricati da evaluate.py)
+    weights_path = os.path.join(OUTPUT_DIR, "q_network.keras")
+    q_network.save(weights_path)
+    print(f"Modello salvato in: {weights_path}")
 
     # episodio finale con la policy addestrata (epsilon=0 -> nessuna esplorazione)
     print("\nRegistro l'episodio finale con la policy addestrata...")

@@ -1076,3 +1076,49 @@ LETTURA
   piu' lungo): senza vedere il frutto la baseline cammina a caso.
 - Rispetto all'obiettivo del progetto (frutti + poche auto-collisioni) gli
   agenti sono migliori in PO e offrono un compromesso diverso in FO.
+
+-------------------------------------------------------------------------------
+E16. CONSEGNA: SEED 0, PESI SALVATI, evaluate.py
+-------------------------------------------------------------------------------
+Data: 2026-11-27
+Categoria:           requisiti delle specifiche
+Stato:               CONCLUSO
+
+MOTIVAZIONE
+Le specifiche chiedono: pesi dell'agente ottimo, un file che li carica e
+valuta l'agente (python evaluate.py deve funzionare subito dopo lo unzip),
+un file per la baseline, il codice di training, l'ambiente, seed fissato a 0.
+Mancavano pesi, evaluate.py e seed.
+
+IMPLEMENTAZIONE
+- Script di training (identici nei due algoritmi): SEED = 0 ->
+  tf.keras.utils.set_random_seed(0) e cartella <risultati>_seed0; a fine
+  training il modello e' salvato in <cartella>/q_network.keras.
+- Configurazione finale negli script: SHAPING="nessuno", LR_DECAY=True,
+  OSSERVABILITA="fully".
+- Agente consegnato: SARSA FO (meno auto-collisioni e segmenti persi,
+  serpente piu' lungo; decisione dell'utente). I numeri del paper restano
+  quelli dei run senza seed.
+- consegna/: ambienti, train.py (copia dello script SARSA che salva anche in
+  weights/), baseline.py (seed 0, ambienti locali), evaluate.py (carica i pesi,
+  20 partite greedy da 500 passi con seed 0, confronto con la baseline),
+  README.md. Verificato in una copia pulita con pesi di prova.
+
+RISULTATI (sarsa_4/risultati_no_shaping_lr_decay_200ep_seed0, pesi copiati in
+consegna/weights/q_network.keras)
+                         run del paper (senza seed)   run seed 0
+  training ultimi 50: frutti        45.9                 44.9
+                      auto-coll.     1.77                 1.52
+                      segm. persi   13.7                 12.6
+                      lunghezza     22.9                 23.2
+  eval ckpt >= 150:   frutti        43.2                 42.6
+                      bloccate       1.2                  1.0
+Il run con seed 0 e' coerente con quello del paper. Il training si e' fermato
+per una sospensione del portatile (episodio ~40) ed e' ripreso senza effetti.
+evaluate.py (copia pulita di consegna/, seed 0, due esecuzioni identiche):
+agente 37.0 frutti, 1.00 auto-collisioni, 5.0 segmenti persi, lunghezza max
+34.0, 3/20 partite bloccate; baseline 73.0 frutti, 6.15 auto-collisioni, 59.4
+segmenti persi, lunghezza max 25.6, 0/20 bloccate. Il seed di valutazione 0
+da' partite diverse dal seed 12345 usato nel training (checkpoint finale:
+45 frutti, 0 bloccate): le 3 partite bloccate dipendono dalle partite estratte.
+
