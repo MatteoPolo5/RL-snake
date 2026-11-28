@@ -365,6 +365,8 @@ The agents are therefore worse on goal (i) and much better on goal (ii), the tra
 In both settings the agents learn more than the rule they explore with.
 Closing the fruit gap in FO would require looking further ahead than one step, for example a larger discount factor, longer training, or giving the agent the free space reachable from the head as an input.
 
+\textbf{Submitted agent.} The submitted weights come from a rerun of the final SARSA FO configuration with seed 0; evaluated on 20 new games with seed 0 it eats 37.0 fruits per game with 1.00 self-collisions and 5.0 lost segments (baseline: 73.0, 6.15 and 59.4).
+
 \begin{figure}[t]
 \begin{center}
 \centerline{\includegraphics[width=\columnwidth]{figures/eval_2x2.pdf}}
